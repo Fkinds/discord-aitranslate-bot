@@ -27,7 +27,7 @@ repository:
 # Environments missing from this file are NOT deleted, because deleting an
 # environment also deletes its secrets.
 environments:
-  - name: repo-settings # holds SETTINGS_TOKEN for the apply job
+  - name: repo-settings # holds the settings app's Client ID and private key for the apply job
     deployment_branch_policy:
       protected_branches: false
       custom_branch_policies: true
