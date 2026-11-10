@@ -1,0 +1,52 @@
+# Applies .github/repository-settings.yml to this repository.
+#
+# - Pull requests that touch the settings get a dry run, which needs no secret.
+# - main, the weekly schedule and manual runs apply the settings. They use
+#   SETTINGS_TOKEN from the repo-settings environment, which only main can use.
+#   The token is a fine-grained PAT for this repository only, with
+#   "Administration: Read and write".
+name: repository-settings
+
+on:
+  pull_request:
+    paths:
+      - .github/repository-settings.yml
+      - .github/workflows/repository-settings.yml
+      - scripts/apply-repository-settings.sh
+  push:
+    branches: [main]
+    paths:
+      - .github/repository-settings.yml
+      - .github/workflows/repository-settings.yml
+      - scripts/apply-repository-settings.sh
+  schedule:
+    - cron: "0 0 * * 1" # Mondays 09:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/apply-repository-settings.sh --dry-run
+
+  apply:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    environment: repo-settings
+    concurrency:
+      group: repository-settings-apply
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/apply-repository-settings.sh
+        env:
+          GH_TOKEN: ${{ secrets.SETTINGS_TOKEN }}

@@ -1,0 +1,77 @@
+# Repository settings, applied by scripts/apply-repository-settings.sh.
+#
+# Field names follow the GitHub REST API as-is, so each section can be checked
+# against the API reference linked above it.
+#
+# Changes take effect when merged to main (.github/workflows/repository-settings.yml).
+# The weekly run reverts settings that were changed by hand in the GitHub UI.
+
+# PATCH /repos/{owner}/{repo}
+# https://docs.github.com/en/rest/repos/repos#update-a-repository
+repository:
+  allow_merge_commit: false
+  allow_squash_merge: false
+  allow_rebase_merge: true
+  allow_auto_merge: true # Renovate merges through GitHub's native auto-merge
+  delete_branch_on_merge: true
+
+# PUT /repos/{owner}/{repo}/environments/{environment_name}
+# https://docs.github.com/en/rest/deployments/environments#create-or-update-an-environment
+#
+# deployment_branch_policies is not part of that request. Its entries are the
+# request bodies of
+# POST /repos/{owner}/{repo}/environments/{environment_name}/deployment-branch-policies
+# https://docs.github.com/en/rest/deployments/branch-policies#create-a-deployment-branch-policy
+# and policies missing from this file are deleted.
+#
+# Environments missing from this file are NOT deleted, because deleting an
+# environment also deletes its secrets.
+environments:
+  - name: repo-settings # holds SETTINGS_TOKEN for the apply job
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+    deployment_branch_policies:
+      - name: main
+        type: branch
+  - name: large-tests # holds GOOGLE_GEMINI_API_KEY for the large tests
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+    deployment_branch_policies:
+      - name: main
+        type: branch
+
+# POST /repos/{owner}/{repo}/rulesets, or PUT /repos/{owner}/{repo}/rulesets/{ruleset_id}
+# https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset
+#
+# Rulesets are matched by name. Rulesets missing from this file are deleted.
+rulesets:
+  - name: protect-main
+    target: branch
+    enforcement: active
+    bypass_actors: []
+    conditions:
+      ref_name:
+        include: ["~DEFAULT_BRANCH"]
+        exclude: []
+    rules:
+      - type: deletion
+      - type: non_fast_forward
+      - type: required_linear_history
+      - type: pull_request
+        parameters:
+          # A sole maintainer cannot approve their own pull request.
+          required_approving_review_count: 0
+          dismiss_stale_reviews_on_push: false
+          require_code_owner_review: false
+          require_last_push_approval: false
+          required_review_thread_resolution: false
+          allowed_merge_methods: [rebase]
+      - type: required_status_checks
+        parameters:
+          strict_required_status_checks_policy: true
+          do_not_enforce_on_create: false
+          required_status_checks:
+            - context: ci
+              integration_id: 15368 # GitHub Actions
