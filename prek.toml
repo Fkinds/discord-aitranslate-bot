@@ -19,9 +19,9 @@ language = "system"
 stages = ["commit-msg"]
 
 [[repos.hooks]]
-id = "unit-tests"
-name = "unit tests"
-entry = "pnpm test"
+id = "small-tests"
+name = "small tests"
+entry = "pnpm test:small"
 language = "system"
 pass_filenames = false
 always_run = true

@@ -9,9 +9,11 @@
     "dev": "ts-node --max-old-space-size=256 src/index.ts",
     "watch": "tsc -w",
     "deploy-commands": "ts-node src/deploy-commands.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test": "jest --selectProjects small",
+    "test:small": "jest --selectProjects small",
+    "test:medium": "jest --selectProjects medium",
+    "test:watch": "jest --watch --selectProjects small",
+    "test:coverage": "jest --coverage --selectProjects small medium",
     "prepare": "prek install"
   },
   "keywords": [
@@ -76,6 +78,7 @@
     "@types/node": "^22.9.0",
     "@types/ws": "^8.5.13",
     "jest": "^29.7.0",
+    "jest-environment-node": "29.7.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
