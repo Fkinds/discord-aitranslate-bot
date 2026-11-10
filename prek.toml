@@ -19,6 +19,15 @@ language = "system"
 stages = ["commit-msg"]
 
 [[repos.hooks]]
+id = "layers"
+name = "layer dependencies (.dependency-cruiser.cjs)"
+entry = "pnpm lint:layers"
+language = "system"
+pass_filenames = false
+files = "^(src/|\\.dependency-cruiser\\.cjs$|tsconfig\\.json$)"
+stages = ["pre-commit"]
+
+[[repos.hooks]]
 id = "small-tests"
 name = "small tests"
 entry = "pnpm test:small"

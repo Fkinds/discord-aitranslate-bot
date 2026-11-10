@@ -40,6 +40,7 @@ jobs:
           runtime: node@${{ matrix.node }}
           cache: true
           require-lockfile: true
+      - run: pnpm lint:layers
       - run: pnpm run build
       - run: pnpm test:small
 
