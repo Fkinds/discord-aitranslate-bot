@@ -13,6 +13,8 @@ A powerful Discord bot that provides seamless real-time voice translation using 
 
 </div>
 
+> This project is based on [lifegence/wp-plugin-lifegence-aitranslator-discord-bot](https://github.com/lifegence/wp-plugin-lifegence-aitranslator-discord-bot) by Lifegence Corporation, used under the MIT License. It is maintained independently and is not affiliated with Lifegence Corporation.
+
 ## ✨ Features
 
 - 🎙️ **Real-time Voice Translation**: Automatically translates speech as users speak in voice channels with minimal latency
@@ -144,7 +146,7 @@ Perfect for various scenarios:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/lifegence/discord-aitranslate-bot.git
+git clone https://github.com/Fkinds/discord-aitranslate-bot.git
 cd discord-aitranslate-bot
 ```
 

@@ -40,16 +40,19 @@
     "german",
     "60-languages"
   ],
-  "author": "Lifegence Corporation.",
+  "author": "Fkinds",
+  "contributors": [
+    "Lifegence Corporation. (original author)"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lifegence/discord-aitranslate-bot.git"
+    "url": "git+https://github.com/Fkinds/discord-aitranslate-bot.git"
   },
   "bugs": {
-    "url": "https://github.com/lifegence/discord-aitranslate-bot/issues"
+    "url": "https://github.com/Fkinds/discord-aitranslate-bot/issues"
   },
-  "homepage": "https://github.com/lifegence/discord-aitranslate-bot#readme",
+  "homepage": "https://github.com/Fkinds/discord-aitranslate-bot#readme",
   "dependencies": {
     "@discordjs/opus": "^0.9.0",
     "@discordjs/voice": "^0.19.0",
