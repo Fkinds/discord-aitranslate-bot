@@ -1,0 +1,52 @@
+# Build and test every pull request and main.
+#
+# The "ci" job is the required status check of the protect-main ruleset
+# (.github/repository-settings.yml). Keep its name, and keep this workflow
+# running on every pull request (no path filters), or pull requests can't merge.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every Node.js release line still supported upstream, matching
+        # "engines" in package.json. https://github.com/nodejs/Release
+        node: ["22", "24", "26"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installs pnpm (version from "packageManager"), Node.js and the
+      # dependencies, failing if pnpm-lock.yaml is missing or out of date.
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          runtime: node@${{ matrix.node }}
+          cache: true
+          require-lockfile: true
+      - run: pnpm run build
+      - run: pnpm test
+
+  ci:
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every test job to succeed
+        env:
+          RESULT: ${{ needs.test.result }}
+        run: test "$RESULT" = success
