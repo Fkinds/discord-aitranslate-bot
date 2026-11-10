@@ -1,0 +1,28 @@
+#:schema https://www.schemastore.org/prek.json
+# Git hooks run by prek: https://prek.j178.dev/configuration/
+# `pnpm install` installs them through the "prepare" script.
+#
+# The hooks call the project's own tools through pnpm, so their versions come
+# from pnpm-lock.yaml. CI runs the same checks, because hooks can be skipped
+# with --no-verify and never run for commits made by bots.
+
+default_install_hook_types = ["pre-commit", "commit-msg"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "commitlint"
+name = "commit message follows Conventional Commits 1.0.0"
+entry = "pnpm exec commitlint --edit"
+language = "system"
+stages = ["commit-msg"]
+
+[[repos.hooks]]
+id = "unit-tests"
+name = "unit tests"
+entry = "pnpm test"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-commit"]
