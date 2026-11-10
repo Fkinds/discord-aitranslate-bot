@@ -1,5 +1,6 @@
 # Build and test every pull request and main, and lint the commit messages of
-# pull requests.
+# pull requests. Tests run by size (jest.config.js): small first, then medium
+# only once every small job has passed.
 #
 # The "ci" job is the required status check of the protect-main ruleset
 # (.github/repository-settings.yml). Keep its name, and keep this workflow
@@ -19,8 +20,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: test (node ${{ matrix.node }})
+  small:
+    name: small (node ${{ matrix.node }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -40,7 +41,26 @@ jobs:
           cache: true
           require-lockfile: true
       - run: pnpm run build
-      - run: pnpm test
+      - run: pnpm test:small
+
+  medium:
+    name: medium (node ${{ matrix.node }})
+    needs: [small]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24", "26"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          runtime: node@${{ matrix.node }}
+          cache: true
+          require-lockfile: true
+      - run: pnpm test:medium
 
   # Rebase merging puts every commit of a pull request on main as it is, so
   # every one of them has to follow Conventional Commits, not only the title.
@@ -65,16 +85,18 @@ jobs:
 
   ci:
     if: always()
-    needs: [test, commitlint]
+    needs: [small, medium, commitlint]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every job to succeed (commitlint runs on pull requests only)
         env:
           EVENT: ${{ github.event_name }}
-          TEST: ${{ needs.test.result }}
+          SMALL: ${{ needs.small.result }}
+          MEDIUM: ${{ needs.medium.result }}
           COMMITLINT: ${{ needs.commitlint.result }}
         run: |
-          test "$TEST" = success
+          test "$SMALL" = success
+          test "$MEDIUM" = success
           if [ "$EVENT" = pull_request ]; then
             test "$COMMITLINT" = success
           else
