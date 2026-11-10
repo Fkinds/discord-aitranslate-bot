@@ -18,6 +18,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   verbose: true,
   clearMocks: true,
-  resetMocks: true,
+  // No resetMocks: it would wipe the implementations that jest.mock() factories
+  // set up once per file, before every test.
   restoreMocks: true,
 };

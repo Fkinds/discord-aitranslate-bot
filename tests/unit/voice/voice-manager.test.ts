@@ -22,7 +22,7 @@ jest.mock('@discordjs/voice', () => ({
     Signalling: 'signalling',
     Disconnected: 'disconnected',
   },
-  entersState: jest.fn().mockResolvedValue(null as any),
+  entersState: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
   EndBehaviorType: {
     AfterSilence: 'afterSilence',
   },

@@ -8,7 +8,7 @@ import { createMockPCMBuffer } from '../../helpers/fixtures';
 jest.mock('@google/generative-ai', () => ({
   GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
     getGenerativeModel: jest.fn().mockReturnValue({
-      generateContent: jest.fn().mockResolvedValue({
+      generateContent: jest.fn<() => Promise<unknown>>().mockResolvedValue({
         response: {
           text: jest.fn().mockReturnValue(
             JSON.stringify({
@@ -19,7 +19,7 @@ jest.mock('@google/generative-ai', () => ({
             })
           ),
         },
-      } as any),
+      }),
     }),
   })),
 }));
@@ -240,7 +240,7 @@ describe('GeminiClient', () => {
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       GoogleGenerativeAI.mockImplementationOnce(() => ({
         getGenerativeModel: jest.fn().mockReturnValue({
-          generateContent: jest.fn().mockRejectedValue(new Error('API Error') as any),
+          generateContent: jest.fn<() => Promise<unknown>>().mockRejectedValue(new Error('API Error')),
         }),
       }));
 
