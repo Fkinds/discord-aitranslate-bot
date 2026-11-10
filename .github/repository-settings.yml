@@ -26,8 +26,18 @@ repository:
 #
 # Environments missing from this file are NOT deleted, because deleting an
 # environment also deletes its secrets.
+#
+# The request keeps the current value of any field it omits (checked on
+# 2026-11-11), so every field is written out, even at its default. Otherwise a
+# reviewer or wait timer added in the UI would never be reverted.
+#
+# can_admins_bypass is not part of the request and can only be changed in the
+# UI. It is left at its default, true.
 environments:
   - name: repo-settings # holds the settings app's Client ID and private key for the apply job
+    wait_timer: 0
+    prevent_self_review: false
+    reviewers: []
     deployment_branch_policy:
       protected_branches: false
       custom_branch_policies: true
@@ -35,6 +45,9 @@ environments:
       - name: main
         type: branch
   - name: large-tests # holds GOOGLE_GEMINI_API_KEY for the large tests
+    wait_timer: 0
+    prevent_self_review: false
+    reviewers: []
     deployment_branch_policy:
       protected_branches: false
       custom_branch_policies: true
@@ -46,6 +59,8 @@ environments:
 # https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset
 #
 # Rulesets are matched by name. Rulesets missing from this file are deleted.
+# Every rule parameter is written out, including the ones GitHub would default,
+# so the file alone describes the ruleset.
 rulesets:
   - name: protect-main
     target: branch
@@ -67,6 +82,10 @@ rulesets:
           require_code_owner_review: false
           require_last_push_approval: false
           required_review_thread_resolution: false
+          required_reviewers: []
+          # Asks for one more approval when Copilot opens a pull request
+          # without a human, but only if the approval count above is not 0.
+          require_extra_approval_for_unattributed_changes: true
           allowed_merge_methods: [rebase]
       - type: required_status_checks
         parameters:
