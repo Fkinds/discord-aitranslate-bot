@@ -9,8 +9,6 @@ export interface BotConfig {
   geminiApiKey: string;
   defaultTargetLanguage: string;
   logLevel: string;
-  audioChunkSizeMs: number;
-  vadEnabled: boolean;
   geminiModel: string;
 }
 
@@ -72,16 +70,6 @@ export interface GeminiTranslationResponse {
   translation: string;
   detectedLanguage: string;
   confidence: number;
-}
-
-/**
- * Audio processor options
- */
-export interface AudioProcessorOptions {
-  sampleRate: number;
-  channels: number;
-  chunkSizeMs: number;
-  vadEnabled: boolean;
 }
 
 /**

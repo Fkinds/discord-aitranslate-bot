@@ -30,8 +30,6 @@ export function loadConfig(): BotConfig {
     geminiApiKey: process.env.GOOGLE_GEMINI_API_KEY!,
     defaultTargetLanguage: process.env.DEFAULT_TARGET_LANGUAGE || 'ja',
     logLevel: process.env.LOG_LEVEL || 'info',
-    audioChunkSizeMs: parseInt(process.env.AUDIO_CHUNK_SIZE_MS || '500', 10),
-    vadEnabled: process.env.VAD_ENABLED !== 'false',
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
   };
 }

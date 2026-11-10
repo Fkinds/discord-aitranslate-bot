@@ -333,7 +333,7 @@ tests/
 The bot is built using a modular architecture with clear separation of concerns:
 
 1. **VoiceManager**: Manages Discord voice connections and audio streams
-2. **AudioProcessor**: Processes audio data (Opus decoding, resampling, VAD)
+2. **AudioProcessor**: Decodes Opus audio and resamples it to 16 kHz mono
 3. **GeminiClient**: Interfaces with Google Gemini API for translation
 4. **TranslationPipeline**: Orchestrates the translation workflow
 5. **CommandHandler**: Handles Discord slash commands
@@ -349,8 +349,6 @@ All configuration is done through environment variables:
 | `GOOGLE_GEMINI_API_KEY` | Gemini API key | Required |
 | `DEFAULT_TARGET_LANGUAGE` | Default translation target | `ja` |
 | `LOG_LEVEL` | Logging level | `info` |
-| `AUDIO_CHUNK_SIZE_MS` | Audio chunk size in ms | `30000` |
-| `VAD_ENABLED` | Voice activity detection | `true` |
 | `GEMINI_MODEL` | Gemini model to use | `gemini-2.0-flash-exp` |
 
 ## 🎬 How It Works
@@ -396,7 +394,6 @@ graph LR
 ### No audio is being processed
 - Check FFmpeg is installed: `ffmpeg -version`
 - Verify bot has "Connect" and "Speak" permissions
-- Check Voice Activity Detection settings in `.env`
 
 ### Translation errors
 - Verify Gemini API key is valid

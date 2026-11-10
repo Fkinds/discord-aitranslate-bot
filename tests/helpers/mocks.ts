@@ -69,14 +69,6 @@ export function createMockAudioProcessor() {
   return {
     convertOpusToPCM: jest.fn().mockResolvedValue(Buffer.alloc(1920)),
     resample: jest.fn().mockResolvedValue(Buffer.alloc(640)),
-    hasVoiceActivity: jest.fn().mockReturnValue(true),
-    createChunks: jest.fn().mockReturnValue([]),
-    addToBuffer: jest.fn(),
-    getBufferSize: jest.fn().mockReturnValue(0),
-    processBuffer: jest.fn().mockReturnValue([]),
-    flushBuffer: jest.fn().mockReturnValue([]),
-    clearBuffer: jest.fn(),
-    clearAllBuffers: jest.fn(),
   };
 }
 
