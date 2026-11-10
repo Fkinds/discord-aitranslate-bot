@@ -21,8 +21,8 @@ fi
 
 # Check if built
 if [ ! -d "dist" ]; then
-    echo "Not built yet. Running npm run build..."
-    npm run build
+    echo "Not built yet. Running pnpm run build..."
+    pnpm run build
     if [ $? -ne 0 ]; then
         echo "Build failed"
         exit 1
@@ -31,7 +31,7 @@ fi
 
 # Start bot in background
 echo "Starting bot..."
-nohup npm run start > bot.log 2>&1 &
+nohup pnpm start > bot.log 2>&1 &
 BOT_PID=$!
 
 # Save PID
