@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { TranslationPipeline } from '../../../src/translation/translation-pipeline';
 import type { Logger, TranslationPipelineOptions } from '../../../src/types';
 import {
@@ -12,6 +12,21 @@ import {
   createMockGeminiResponse,
 } from '../../helpers/fixtures';
 
+/**
+ * Wait for a promise while running the fake timers it waits on, such as the
+ * delay between retries, so that no test sleeps in real time.
+ */
+async function settle<T>(promise: Promise<T>): Promise<T> {
+  const outcome = promise.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error })
+  );
+  await jest.runAllTimersAsync();
+  const result = await outcome;
+  if (result.ok) return result.value;
+  throw result.error;
+}
+
 describe('TranslationPipeline', () => {
   let mockLogger: Logger;
   let mockGeminiClient: any;
@@ -19,6 +34,7 @@ describe('TranslationPipeline', () => {
   let defaultOptions: Partial<TranslationPipelineOptions>;
 
   beforeEach(() => {
+    jest.useFakeTimers();
     mockLogger = createMockLogger();
     mockGeminiClient = createMockGeminiClient();
     mockAudioProcessor = createMockAudioProcessor();
@@ -28,6 +44,10 @@ describe('TranslationPipeline', () => {
       maxRetries: 3,
       retryDelay: 100,
     };
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   describe('constructor', () => {
@@ -186,7 +206,7 @@ describe('TranslationPipeline', () => {
         .mockResolvedValueOnce(createMockGeminiResponse());
 
       const audioChunk = createMockAudioChunk();
-      const result = await pipeline.processAudioChunk(audioChunk, 'ja');
+      const result = await settle(pipeline.processAudioChunk(audioChunk, 'ja'));
 
       expect(result).toBeDefined();
       expect(mockGeminiClient.translate).toHaveBeenCalledTimes(3);
@@ -204,7 +224,7 @@ describe('TranslationPipeline', () => {
 
       const audioChunk = createMockAudioChunk();
 
-      await expect(pipeline.processAudioChunk(audioChunk, 'ja')).rejects.toThrow();
+      await expect(settle(pipeline.processAudioChunk(audioChunk, 'ja'))).rejects.toThrow();
       expect(mockGeminiClient.translate).toHaveBeenCalledTimes(2);
     });
 
@@ -221,7 +241,7 @@ describe('TranslationPipeline', () => {
         .mockResolvedValueOnce(createMockGeminiResponse());
 
       const audioChunk = createMockAudioChunk();
-      await pipeline.processAudioChunk(audioChunk, 'ja');
+      await settle(pipeline.processAudioChunk(audioChunk, 'ja'));
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Translation failed, retrying',
@@ -391,7 +411,8 @@ describe('TranslationPipeline', () => {
     it('should handle partial failures in batch', async () => {
       // Create a fresh Gemini client mock for this test
       const failingGeminiClient = {
-        translate: jest.fn()
+        translate: jest
+          .fn<() => Promise<unknown>>()
           .mockResolvedValueOnce(createMockGeminiResponse())
           .mockRejectedValueOnce(new Error('Translation failed'))
           .mockResolvedValueOnce(createMockGeminiResponse()),
@@ -409,7 +430,7 @@ describe('TranslationPipeline', () => {
         createMockAudioChunk({ userId: 'user3' }),
       ];
 
-      const results = await pipeline.processBatch(chunks, 'ja');
+      const results = await settle(pipeline.processBatch(chunks, 'ja'));
 
       expect(results.length).toBe(2); // Only successful ones
       expect(mockLogger.error).toHaveBeenCalled();
@@ -440,7 +461,7 @@ describe('TranslationPipeline', () => {
 
       const audioChunk = createMockAudioChunk();
 
-      await expect(pipeline.processAudioChunk(audioChunk, 'ja')).rejects.toThrow();
+      await expect(settle(pipeline.processAudioChunk(audioChunk, 'ja'))).rejects.toThrow();
     });
 
     it('should log errors with context', async () => {
@@ -454,11 +475,7 @@ describe('TranslationPipeline', () => {
 
       const audioChunk = createMockAudioChunk({ userId: 'user123' });
 
-      try {
-        await pipeline.processAudioChunk(audioChunk, 'ja');
-      } catch (error) {
-        // Expected
-      }
+      await expect(settle(pipeline.processAudioChunk(audioChunk, 'ja'))).rejects.toThrow();
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Failed to process audio chunk',
