@@ -34,15 +34,7 @@ async function main() {
 
   // Initialize components
   const voiceManager = new VoiceManager(logger);
-  const audioProcessor = new AudioProcessor(
-    {
-      sampleRate: 16000, // Gemini API expects 16kHz mono
-      channels: 1,
-      chunkSizeMs: config.audioChunkSizeMs,
-      vadEnabled: config.vadEnabled,
-    },
-    logger
-  );
+  const audioProcessor = new AudioProcessor(logger);
 
   const geminiClient = new GeminiClient(
     config.geminiApiKey,

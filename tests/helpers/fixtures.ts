@@ -40,13 +40,6 @@ export function createMockPCMBuffer(sampleCount: number, channels = 2): Buffer {
 }
 
 /**
- * Create silent PCM buffer
- */
-export function createSilentPCMBuffer(sampleCount: number, channels = 2): Buffer {
-  return Buffer.alloc(sampleCount * channels * 2, 0);
-}
-
-/**
  * Create mock translation result
  */
 export function createMockTranslationResult(
