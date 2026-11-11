@@ -6,7 +6,10 @@ import {
   type TranslationPublisher,
 } from '../../usecases/ports/translation-publisher';
 
-/** Posts translations to a Discord text channel as "**speaker**: translation". */
+/**
+ * Posts translations to a Discord text channel as "**speaker**: translation",
+ * without notifying anyone of the mentions in it.
+ */
 export class DiscordTranslationPublisher implements TranslationPublisher {
   constructor(private readonly client: Pick<Client, 'channels' | 'guilds'>) {}
 
@@ -17,7 +20,12 @@ export class DiscordTranslationPublisher implements TranslationPublisher {
         throw new PublishFailed(`The bot cannot post to channel ${post.textChannelId.value}`);
       }
       const speaker = await this.speakerName(post.guildId, post.speakerId);
-      await channel.send(`**${speaker}**: ${post.translation.translated}`);
+      await channel.send({
+        content: `**${speaker}**: ${post.translation.translated}`,
+        // What was said, and the speaker's name, may read "@everyone" or a
+        // role or user mention; show it as text and notify nobody.
+        allowedMentions: { parse: [] },
+      });
     } catch (error) {
       if (error instanceof PublishFailed) throw error;
       throw new PublishFailed(`Failed to post to channel ${post.textChannelId.value}`, { cause: error });

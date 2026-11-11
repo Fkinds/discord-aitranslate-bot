@@ -6,7 +6,7 @@ import { PublishFailed, type TranslationPost } from '../../../../src/usecases/po
 
 /** The parts of a discord.js Client the publisher touches. */
 class FakeDiscord {
-  readonly sent: string[] = [];
+  readonly messages: Array<{ content: string; allowedMentions?: unknown }> = [];
   sendable = true;
   channelExists = true;
   sendError: Error | undefined;
@@ -19,9 +19,9 @@ class FakeDiscord {
           ? {
               id,
               isSendable: () => this.sendable,
-              send: async (content: string) => {
+              send: async (message: { content: string; allowedMentions?: unknown }) => {
                 if (this.sendError) throw this.sendError;
-                this.sent.push(content);
+                this.messages.push(message);
               },
             }
           : null,
@@ -30,13 +30,17 @@ class FakeDiscord {
       cache: new Map([['1', { members: { fetch: async () => this.member } }]]),
     },
   } as unknown as Pick<Client, 'channels' | 'guilds'>;
+
+  get sent(): string[] {
+    return this.messages.map((message) => message.content);
+  }
 }
 
-const post = (guild = '1'): TranslationPost => ({
+const post = (guild = '1', translated = 'こんにちは'): TranslationPost => ({
   guildId: GuildId.of(guild),
   textChannelId: ChannelId.of('20'),
   speakerId: UserId.of('30'),
-  translation: { original: 'Hello', translated: 'こんにちは', detectedLanguage: 'en' },
+  translation: { original: 'Hello', translated, detectedLanguage: 'en' },
 });
 
 describe('DiscordTranslationPublisher', () => {
@@ -52,6 +56,16 @@ describe('DiscordTranslationPublisher', () => {
     await publisher.publish(post());
 
     expect(discord.sent).toEqual(['**Alice**: こんにちは']);
+  });
+
+  it('notifies nobody of the mentions in what was said or in the name', async () => {
+    discord.member = { displayName: '@here', user: { username: 'alice_01' } };
+
+    await publisher.publish(post('1', '@everyone <@&40> <@50> 集合'));
+
+    expect(discord.messages).toEqual([
+      { content: '**@here**: @everyone <@&40> <@50> 集合', allowedMentions: { parse: [] } },
+    ]);
   });
 
   it('falls back to the user name when the server shows no other name', async () => {
