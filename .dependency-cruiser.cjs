@@ -5,14 +5,10 @@
 //   usecases        domain
 //   infrastructure  domain, usecases, npm packages, Node.js modules
 //   interfaces      domain, usecases, npm packages, Node.js modules
-//   main.ts         everything (the composition root)
+//   main.ts and     everything (the entry points, which compose the layers)
+//   deploy-commands.ts
 //
-// The pre-layer modules (bot, translation, voice, utils, types, index.ts and
-// deploy-commands.ts) are left unchecked until they are removed, but the
-// layers must not depend on them.
-
-const LAYERS = '^src/(domain|usecases|infrastructure|interfaces)/';
-const LEGACY = '^src/(bot|translation|voice|utils|types)/|^src/(index|deploy-commands)\\.ts$';
+// Nothing depends on the entry points.
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
@@ -46,11 +42,11 @@ module.exports = {
       to: { path: '^src/(infrastructure/|main\\.ts$)' },
     },
     {
-      name: 'layers-not-on-legacy-modules',
-      comment: 'New layers must not depend on the modules they replace.',
+      name: 'nothing-on-entry-points',
+      comment: 'The entry points compose the layers; nothing imports them.',
       severity: 'error',
-      from: { path: LAYERS },
-      to: { path: LEGACY },
+      from: {},
+      to: { path: '^src/(main|deploy-commands)\\.ts$' },
     },
     {
       name: 'no-circular',
