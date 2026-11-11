@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
+import { type GenerateContentResponse, GoogleGenAI, type Part } from '@google/genai';
 import type { LanguageCode } from '../../domain/language-code';
 import type { Logger } from '../../usecases/ports/logger';
 import type { SpeechAudio } from '../../usecases/ports/speech-audio';
@@ -6,9 +6,10 @@ import { type Translation, TranslationFailed, type Translator } from '../../usec
 import { promptFor, readReply } from './gemini-reply';
 import { toWav } from './wav';
 
-/** The part of the Gemini SDK's GenerativeModel this adapter uses. */
+/** The Gemini model, as this adapter uses it: parts in, the answer's text out. */
 export interface GeminiModel {
-  generateContent(parts: Part[]): Promise<{ response: { text(): string } }>;
+  /** @throws when the request fails or the answer was blocked. */
+  generateText(parts: Part[]): Promise<string>;
 }
 
 /**
@@ -17,7 +18,47 @@ export interface GeminiModel {
  */
 export function geminiModel(apiKey: string, modelName: string, baseUrl?: string): GeminiModel {
   if (apiKey.trim() === '') throw new Error('Gemini API key is required');
-  return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: modelName }, baseUrl ? { baseUrl } : undefined);
+  // Stated outright, so that the SDK's environment variables (such as
+  // GOOGLE_GENAI_API_VERSION or GOOGLE_GENAI_USE_VERTEXAI) cannot change them.
+  const ai = new GoogleGenAI({
+    apiKey,
+    vertexai: false,
+    apiVersion: 'v1beta',
+    ...(baseUrl ? { httpOptions: { baseUrl } } : {}),
+  });
+  return {
+    generateText: async (parts) =>
+      answerText(await ai.models.generateContent({ model: modelName, contents: [{ role: 'user', parts }] })),
+  };
+}
+
+/** Finish reasons that mean the answer was blocked, as @google/generative-ai counted them. */
+const BLOCKED_FINISH_REASONS: readonly string[] = ['RECITATION', 'SAFETY', 'LANGUAGE'];
+
+/**
+ * The text of Gemini's answer, read as the @google/generative-ai SDK read it:
+ * the first candidate's text parts joined, or "" when there is no candidate.
+ *
+ * @throws Error when the answer was blocked, by its prompt feedback or by the
+ *   first candidate's finish reason.
+ */
+export function answerText(answer: Pick<GenerateContentResponse, 'candidates' | 'promptFeedback'>): string {
+  const [candidate] = answer.candidates ?? [];
+  if (candidate) {
+    if (candidate.finishReason && BLOCKED_FINISH_REASONS.includes(candidate.finishReason)) {
+      throw new Error(`Candidate was blocked due to ${candidate.finishReason}`);
+    }
+    return (candidate.content?.parts ?? [])
+      .filter((part) => !part.thought)
+      .map((part) => part.text ?? '')
+      .join('');
+  }
+  if (answer.promptFeedback) {
+    const { blockReason, blockReasonMessage } = answer.promptFeedback;
+    const reason = (blockReason ? ` due to ${blockReason}` : '') + (blockReasonMessage ? `: ${blockReasonMessage}` : '');
+    throw new Error(`Text not available. Response was blocked${reason}`);
+  }
+  return '';
 }
 
 export interface RetryPolicy {
@@ -71,11 +112,10 @@ export class GeminiTranslator implements Translator {
   }
 
   private async translateOnce(audio: SpeechAudio, targetLanguage: LanguageCode): Promise<Translation> {
-    const result = await this.model.generateContent([
+    const text = await this.model.generateText([
       { text: promptFor(targetLanguage) },
       { inlineData: { mimeType: 'audio/wav', data: toWav(audio).toString('base64') } },
     ]);
-    const text = result.response.text();
 
     const reply = readReply(text);
     if (reply.kind === 'unreadable') {

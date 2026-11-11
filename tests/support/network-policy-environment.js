@@ -15,6 +15,7 @@ const net = require('node:net');
 const { TestEnvironment } = require('jest-environment-node');
 
 const POLICIES = new Set(['none', 'loopback']);
+const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1');
 
 // Where a net.Socket#connect call is headed. Its arguments come in the forms
 // (options[, listener]), (path[, listener]) and (port[, host][, listener]);
@@ -72,6 +73,14 @@ class NetworkPolicyEnvironment extends TestEnvironment {
       }
       return connect.apply(this, args);
     };
+
+    // Node's fetch keeps its connection pool, Undici's global dispatcher, on
+    // the global object under this symbol, and sets it up on first use. Jest
+    // gives each test file a global object of its own without it, so code
+    // that reads it, such as @google/genai, fails there but not in Node. Share
+    // Node's; its connections still go through the guarded connect above.
+    new Headers();
+    this.global[UNDICI_GLOBAL_DISPATCHER] = globalThis[UNDICI_GLOBAL_DISPATCHER];
   }
 
   async teardown() {

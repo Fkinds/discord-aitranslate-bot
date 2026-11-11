@@ -1,7 +1,8 @@
 # pnpm settings: https://pnpm.io/settings
 
-# Dependencies allowed to run install scripts. Any other dependency with an
-# install script fails the install (strictDepBuilds), so a new one has to be
-# reviewed and added here. https://pnpm.io/settings#allowbuilds
+# Whether each dependency with an install script may run it. A dependency with
+# an install script that is not listed fails the install (strictDepBuilds), so
+# a new one has to be reviewed and added here. https://pnpm.io/settings#allowbuilds
 allowBuilds:
   '@discordjs/opus': true # downloads a prebuilt native Opus binding, or compiles it
+  protobufjs: false # via @google/genai; its postinstall only warns about how dependents pin it
