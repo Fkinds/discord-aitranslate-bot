@@ -39,7 +39,7 @@ describe('voice event use cases', () => {
       new RecordSpeakingStarted(sessions).execute({ guildId: GUILD, speakerId: ALICE });
 
       const session = sessions.find(GUILD);
-      expect(session?.targetLanguage.tag).toBe('ko');
+      expect(session?.languages.toString()).toBe('ko');
       expect(session?.voiceChannelId.value).toBe('10');
       expect(session?.textChannelId.value).toBe('20');
     });

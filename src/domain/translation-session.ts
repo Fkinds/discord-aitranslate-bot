@@ -1,7 +1,6 @@
 import type { ChannelId, GuildId, UserId } from './discord-ids';
-import type { LanguageCode } from './language-code';
 import { Entity } from './shared/entity';
-import { TranslationLanguages } from './translation-languages';
+import type { TranslationLanguages } from './translation-languages';
 import { frozen } from './shared/value-object';
 
 interface SessionState {
@@ -28,20 +27,16 @@ export class TranslationSession extends Entity<GuildId> {
     super(guildId);
   }
 
-  /** Takes `targetLanguage` until every caller passes `languages`; see targetLanguage. */
-  static start(
-    params: {
-      guildId: GuildId;
-      voiceChannelId: ChannelId;
-      textChannelId: ChannelId;
-      startedAt: Date;
-    } & ({ languages: TranslationLanguages } | { targetLanguage: LanguageCode })
-  ): TranslationSession {
-    const { guildId, voiceChannelId, textChannelId, startedAt } = params;
+  static start(params: {
+    guildId: GuildId;
+    voiceChannelId: ChannelId;
+    textChannelId: ChannelId;
+    languages: TranslationLanguages;
+    startedAt: Date;
+  }): TranslationSession {
+    const { guildId, startedAt, ...channelsAndLanguages } = params;
     return TranslationSession.build(guildId, {
-      voiceChannelId,
-      textChannelId,
-      languages: 'languages' in params ? params.languages : TranslationLanguages.of(params.targetLanguage),
+      ...channelsAndLanguages,
       startedAtMs: startedAt.getTime(),
       activeSpeakers: new Map(),
     });
@@ -67,13 +62,6 @@ export class TranslationSession extends Entity<GuildId> {
     return this.state.languages;
   }
 
-  /**
-   * The first of the languages.
-   * @deprecated Use languages; this goes once its callers have moved.
-   */
-  get targetLanguage(): LanguageCode {
-    return this.state.languages.first;
-  }
 
   get startedAt(): Date {
     return new Date(this.state.startedAtMs);
@@ -92,10 +80,6 @@ export class TranslationSession extends Entity<GuildId> {
     return TranslationSession.build(this.id, { ...this.state, languages });
   }
 
-  /** @deprecated Use changeLanguages; this goes once its callers have moved. */
-  changeTargetLanguage(language: LanguageCode): TranslationSession {
-    return this.changeLanguages(TranslationLanguages.of(language));
-  }
 
   /** A user started speaking. Saying it again changes nothing. */
   speakerStarted(userId: UserId): TranslationSession {

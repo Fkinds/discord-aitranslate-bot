@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { GuildId, UserId } from '../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../src/domain/language-code';
+import { TranslationLanguages } from '../../../src/domain/translation-languages';
 import { SpeechAudio } from '../../../src/usecases/ports/speech-audio';
 import { PublishFailed, type TranslationPost } from '../../../src/usecases/ports/translation-publisher';
 import { TranslationFailed } from '../../../src/usecases/ports/translator';
@@ -59,7 +60,7 @@ describe('TranslateUtterance', () => {
     const speech = deferred<SpeechAudio>();
 
     const pending = translateUtterance.execute(utterance(speech.promise));
-    sessions.save(running.changeTargetLanguage(LanguageCode.of('en')));
+    sessions.save(running.changeLanguages(TranslationLanguages.of(LanguageCode.of('en'))));
     speech.resolve(SPEECH);
     await pending;
 

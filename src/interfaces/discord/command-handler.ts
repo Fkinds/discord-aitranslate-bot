@@ -2,7 +2,7 @@ import { type ChatInputCommandInteraction, type GuildMember, MessageFlags } from
 import { ChannelId, GuildId } from '../../domain/discord-ids';
 import { LanguageCode } from '../../domain/language-code';
 import type { TranslationLanguages } from '../../domain/translation-languages';
-import type { ChangeTargetLanguage } from '../../usecases/change-target-language';
+import type { ChangeLanguages } from '../../usecases/change-languages';
 import type { GetTranslationStatus } from '../../usecases/get-translation-status';
 import type { Clock } from '../../usecases/ports/clock';
 import type { Logger } from '../../usecases/ports/logger';
@@ -16,7 +16,7 @@ import { statusEmbed } from './status-embed';
 export interface CommandUseCases {
   readonly startTranslation: StartTranslation;
   readonly stopTranslation: StopTranslation;
-  readonly changeTargetLanguage: ChangeTargetLanguage;
+  readonly changeLanguages: ChangeLanguages;
   readonly getTranslationStatus: GetTranslationStatus;
 }
 
@@ -151,7 +151,7 @@ export class CommandHandler {
   private async changeLanguage(interaction: Interaction, guildId: GuildId): Promise<void> {
     const language = LanguageCode.of(interaction.options.getString(LANGUAGE_OPTION, true));
     const { secondLanguage } = chosenLanguages(interaction);
-    const result = this.useCases.changeTargetLanguage.execute({ guildId, language, secondLanguage });
+    const result = this.useCases.changeLanguages.execute({ guildId, language, secondLanguage });
 
     switch (result.kind) {
       case 'changed': {

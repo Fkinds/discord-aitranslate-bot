@@ -10,7 +10,7 @@ import { PlaceholderTranslator } from './infrastructure/placeholder-translator';
 import { createLogger } from './infrastructure/winston-logger';
 import { CommandHandler } from './interfaces/discord/command-handler';
 import { VoiceEventHandler } from './interfaces/discord/voice-event-handler';
-import { ChangeTargetLanguage } from './usecases/change-target-language';
+import { ChangeLanguages } from './usecases/change-languages';
 import { EndDisconnectedSession } from './usecases/end-disconnected-session';
 import { GetTranslationStatus } from './usecases/get-translation-status';
 import type { Clock } from './usecases/ports/clock';
@@ -71,7 +71,7 @@ export function compose(config: Config, client: Client, logger: Logger, clock: C
     {
       startTranslation: new StartTranslation(sessions, voice, clock, config.defaultLanguages),
       stopTranslation: new StopTranslation(sessions, voice),
-      changeTargetLanguage: new ChangeTargetLanguage(sessions),
+      changeLanguages: new ChangeLanguages(sessions),
       getTranslationStatus: new GetTranslationStatus(sessions, clock),
     },
     clock,

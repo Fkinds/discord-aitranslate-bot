@@ -4,7 +4,7 @@ import { GuildId } from '../../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../../src/domain/language-code';
 import { TranslationLanguages } from '../../../../src/domain/translation-languages';
 import { CommandHandler } from '../../../../src/interfaces/discord/command-handler';
-import { ChangeTargetLanguage } from '../../../../src/usecases/change-target-language';
+import { ChangeLanguages } from '../../../../src/usecases/change-languages';
 import { GetTranslationStatus } from '../../../../src/usecases/get-translation-status';
 import { VoiceConnectionFailed } from '../../../../src/usecases/ports/voice-connector';
 import { SessionStore } from '../../../../src/usecases/session-store';
@@ -93,7 +93,7 @@ describe('CommandHandler', () => {
       {
         startTranslation: new StartTranslation(sessions, voice, clock, TranslationLanguages.of(LanguageCode.of('ja'))),
         stopTranslation: new StopTranslation(sessions, voice),
-        changeTargetLanguage: new ChangeTargetLanguage(sessions),
+        changeLanguages: new ChangeLanguages(sessions),
         getTranslationStatus: new GetTranslationStatus(sessions, clock),
       },
       clock,
@@ -224,7 +224,7 @@ describe('CommandHandler', () => {
       const answers = await handle(new FakeInteraction('translate-language', { strings: { language: 'ko' } }));
 
       expect(answers).toEqual([{ via: 'reply', content: '🔄 Target language changed to **Korean (한국어)**', flags: EPHEMERAL }]);
-      expect(sessions.find(GuildId.of('1'))?.targetLanguage.tag).toBe('ko');
+      expect(sessions.find(GuildId.of('1'))?.languages.toString()).toBe('ko');
     });
 
     it('changes to a pair of languages and says so', async () => {

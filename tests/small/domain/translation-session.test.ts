@@ -11,7 +11,7 @@ function startSession(guild = '1'): TranslationSession {
     guildId: GuildId.of(guild),
     voiceChannelId: ChannelId.of('10'),
     textChannelId: ChannelId.of('20'),
-    targetLanguage: LanguageCode.of('ja'),
+    languages: TranslationLanguages.of(LanguageCode.of('ja')),
     startedAt: STARTED_AT,
   });
 }
@@ -24,7 +24,7 @@ describe('TranslationSession', () => {
       expect(session.guildId.equals(GuildId.of('1'))).toBe(true);
       expect(session.voiceChannelId.equals(ChannelId.of('10'))).toBe(true);
       expect(session.textChannelId.equals(ChannelId.of('20'))).toBe(true);
-      expect(session.targetLanguage.equals(LanguageCode.of('ja'))).toBe(true);
+      expect(session.languages.equals(TranslationLanguages.of(LanguageCode.of('ja')))).toBe(true);
       expect(session.startedAt).toEqual(STARTED_AT);
       expect(session.activeSpeakers).toEqual([]);
     });
@@ -35,7 +35,7 @@ describe('TranslationSession', () => {
         guildId: GuildId.of('1'),
         voiceChannelId: ChannelId.of('10'),
         textChannelId: ChannelId.of('20'),
-        targetLanguage: LanguageCode.of('ja'),
+        languages: TranslationLanguages.of(LanguageCode.of('ja')),
         startedAt,
       });
 
@@ -65,10 +65,6 @@ describe('TranslationSession', () => {
       expect(session.languages.equals(JA_KO)).toBe(true);
     });
 
-    it('takes a target language, until its callers have moved, as that one language', () => {
-      expect(startSession().languages.equals(TranslationLanguages.of(LanguageCode.of('ja')))).toBe(true);
-    });
-
     it('returns a session with other languages, keeping who is speaking, and leaves this one as it was', () => {
       const session = startSession().speakerStarted(UserId.of('100'));
 
@@ -80,21 +76,6 @@ describe('TranslationSession', () => {
       expect(changed.equals(session)).toBe(true);
     });
 
-    it('gives the first of a pair as the target language, until its callers have moved', () => {
-      expect(startSession().changeLanguages(JA_KO).targetLanguage.tag).toBe('ja');
-    });
-  });
-
-  describe('changeTargetLanguage', () => {
-    it('returns a session with the new language and leaves this one as it was', () => {
-      const session = startSession();
-
-      const changed = session.changeTargetLanguage(LanguageCode.of('en'));
-
-      expect(changed.targetLanguage.tag).toBe('en');
-      expect(session.targetLanguage.tag).toBe('ja');
-      expect(changed.equals(session)).toBe(true);
-    });
   });
 
   describe('speakers', () => {

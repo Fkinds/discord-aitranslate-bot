@@ -35,14 +35,14 @@ describe('StartTranslation', () => {
     const session = sessions.find(GuildId.of('1'));
     expect(session?.voiceChannelId.value).toBe('10');
     expect(session?.textChannelId.value).toBe('20');
-    expect(session?.targetLanguage.tag).toBe('en');
+    expect(session?.languages.toString()).toBe('en');
     expect(session?.startedAt).toEqual(STARTED_AT);
   });
 
   it('translates into the default language when none is given', async () => {
     await startTranslation.execute(command());
 
-    expect(sessions.find(GuildId.of('1'))?.targetLanguage.tag).toBe('ja');
+    expect(sessions.find(GuildId.of('1'))?.languages.toString()).toBe('ja');
   });
 
   it.each([
