@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import type { Part } from '@google/generative-ai';
+import type { Part } from '@google/genai';
 import { LanguageCode } from '../../../../src/domain/language-code';
 import { promptFor } from '../../../../src/infrastructure/gemini/gemini-reply';
-import { type GeminiModel, GeminiTranslator, geminiModel } from '../../../../src/infrastructure/gemini/gemini-translator';
+import { answerText, type GeminiModel, GeminiTranslator, geminiModel } from '../../../../src/infrastructure/gemini/gemini-translator';
 import { toWav } from '../../../../src/infrastructure/gemini/wav';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
@@ -14,12 +14,12 @@ class FakeGeminiModel implements GeminiModel {
 
   constructor(private readonly replies: Array<string | Error>) {}
 
-  async generateContent(parts: Part[]): Promise<{ response: { text(): string } }> {
+  async generateText(parts: Part[]): Promise<string> {
     this.requests.push(parts);
     const reply = this.replies.shift();
     if (reply === undefined) throw new Error('no reply left');
     if (reply instanceof Error) throw reply;
-    return { response: { text: () => reply } };
+    return reply;
   }
 }
 
@@ -109,6 +109,36 @@ describe('geminiModel', () => {
   });
 
   it('makes a model without connecting', () => {
-    expect(typeof geminiModel('test-key', 'gemini-2.0-flash-exp').generateContent).toBe('function');
+    expect(typeof geminiModel('test-key', 'gemini-2.0-flash-exp').generateText).toBe('function');
+  });
+});
+
+describe('answerText', () => {
+  const candidate = (parts: Part[], finishReason?: string) => ({ content: { role: 'model', parts }, finishReason });
+
+  it("joins the first candidate's text parts, leaving out thoughts", () => {
+    const answer = { candidates: [candidate([{ text: 'Hel' }, { text: 'thinking', thought: true }, { text: 'lo' }])] };
+
+    expect(answerText(answer as never)).toBe('Hello');
+  });
+
+  it('is empty when there is no candidate and nothing was blocked, as the old SDK had it', () => {
+    expect(answerText({ candidates: [] })).toBe('');
+  });
+
+  it.each(['SAFETY', 'RECITATION', 'LANGUAGE'])('fails when the candidate finished for %s', (finishReason) => {
+    const answer = { candidates: [candidate([{ text: 'partial' }], finishReason)] };
+
+    expect(() => answerText(answer as never)).toThrow(`Candidate was blocked due to ${finishReason}`);
+  });
+
+  it('reads a candidate that finished normally', () => {
+    expect(answerText({ candidates: [candidate([{ text: 'Hello' }], 'STOP')] } as never)).toBe('Hello');
+  });
+
+  it('fails with the reason when the prompt was blocked', () => {
+    const answer = { promptFeedback: { blockReason: 'SAFETY', blockReasonMessage: 'unsafe' } };
+
+    expect(() => answerText(answer as never)).toThrow('Text not available. Response was blocked due to SAFETY: unsafe');
   });
 });

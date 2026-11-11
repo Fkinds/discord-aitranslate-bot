@@ -60,7 +60,7 @@
   "dependencies": {
     "@discordjs/opus": "^0.11.0",
     "@discordjs/voice": "^0.19.0",
-    "@google/generative-ai": "^0.21.0",
+    "@google/genai": "3.0.0",
     "@snazzah/davey": "^0.1.7",
     "discord.js": "^14.24.2",
     "dotenv": "^16.4.5",
