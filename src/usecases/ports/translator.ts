@@ -12,16 +12,6 @@ export interface SpeechTranslation {
   readonly translations: ReadonlyArray<{ readonly language: LanguageCode; readonly text: string }>;
 }
 
-/** What a speaker said, and its translation, as posted. */
-export interface Translation {
-  /** What was said, as heard, in the language it was said in. */
-  readonly original: string;
-  /** What was said, in the target language. */
-  readonly translated: string;
-  /** The language the translator heard, as the translator names it; for information only. */
-  readonly detectedLanguage: string;
-}
-
 /** Translating failed for a technical reason, such as the service being unreachable. */
 export class TranslationFailed extends Error {
   constructor(message: string, options?: { cause?: unknown }) {

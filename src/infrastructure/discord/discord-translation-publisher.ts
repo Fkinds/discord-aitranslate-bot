@@ -7,8 +7,13 @@ import {
 } from '../../usecases/ports/translation-publisher';
 
 /**
- * Posts translations to a Discord text channel as "**speaker**: translation",
- * without notifying anyone of the mentions in it.
+ * Posts to a Discord text channel what was said, under the speaker's name,
+ * and below it each translation as a quote:
+ *
+ *     **Alice**: 안녕하세요
+ *     > こんにちは
+ *
+ * It notifies nobody of the mentions in the post.
  */
 export class DiscordTranslationPublisher implements TranslationPublisher {
   constructor(private readonly client: Pick<Client, 'channels' | 'guilds'>) {}
@@ -21,7 +26,7 @@ export class DiscordTranslationPublisher implements TranslationPublisher {
       }
       const speaker = await this.speakerName(post.guildId, post.speakerId);
       await channel.send({
-        content: `**${speaker}**: ${post.translation.translated}`,
+        content: postText(speaker, post),
         // What was said, and the speaker's name, may read "@everyone" or a
         // role or user mention; show it as text and notify nobody.
         allowedMentions: { parse: [] },
@@ -39,4 +44,15 @@ export class DiscordTranslationPublisher implements TranslationPublisher {
     const member = await guild.members.fetch(userId.value);
     return member.displayName || member.user.username;
   }
+}
+
+/** The post's text: "**speaker**: original", then each translation quoted, line by line. */
+export function postText(speaker: string, post: Pick<TranslationPost, 'original' | 'translations'>): string {
+  const quoted = post.translations.map(({ text }) =>
+    text
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n')
+  );
+  return [`**${speaker}**: ${post.original}`, ...quoted].join('\n');
 }

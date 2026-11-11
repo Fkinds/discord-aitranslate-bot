@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import type { Client } from 'discord.js';
 import { ChannelId, GuildId, UserId } from '../../../../src/domain/discord-ids';
-import { DiscordTranslationPublisher } from '../../../../src/infrastructure/discord/discord-translation-publisher';
+import { LanguageCode } from '../../../../src/domain/language-code';
+import { DiscordTranslationPublisher, postText } from '../../../../src/infrastructure/discord/discord-translation-publisher';
 import { PublishFailed, type TranslationPost } from '../../../../src/usecases/ports/translation-publisher';
 
 /** The parts of a discord.js Client the publisher touches. */
@@ -36,11 +37,15 @@ class FakeDiscord {
   }
 }
 
-const post = (guild = '1', translated = 'こんにちは'): TranslationPost => ({
+const JA = LanguageCode.of('ja');
+const KO = LanguageCode.of('ko');
+
+const post = (guild = '1', original = 'Hello'): TranslationPost => ({
   guildId: GuildId.of(guild),
   textChannelId: ChannelId.of('20'),
   speakerId: UserId.of('30'),
-  translation: { original: 'Hello', translated, detectedLanguage: 'en' },
+  original,
+  translations: [{ language: JA, text: 'こんにちは' }],
 });
 
 describe('DiscordTranslationPublisher', () => {
@@ -52,19 +57,19 @@ describe('DiscordTranslationPublisher', () => {
     publisher = new DiscordTranslationPublisher(discord.client);
   });
 
-  it("posts the translation under the speaker's name in the server", async () => {
+  it("posts what was said under the speaker's name in the server, with its translation", async () => {
     await publisher.publish(post());
 
-    expect(discord.sent).toEqual(['**Alice**: こんにちは']);
+    expect(discord.sent).toEqual(['**Alice**: Hello\n> こんにちは']);
   });
 
   it('notifies nobody of the mentions in what was said or in the name', async () => {
     discord.member = { displayName: '@here', user: { username: 'alice_01' } };
 
-    await publisher.publish(post('1', '@everyone <@&40> <@50> 集合'));
+    await publisher.publish(post('1', '@everyone <@&40> <@50> gather'));
 
     expect(discord.messages).toEqual([
-      { content: '**@here**: @everyone <@&40> <@50> 集合', allowedMentions: { parse: [] } },
+      { content: '**@here**: @everyone <@&40> <@50> gather\n> こんにちは', allowedMentions: { parse: [] } },
     ]);
   });
 
@@ -73,7 +78,7 @@ describe('DiscordTranslationPublisher', () => {
 
     await publisher.publish(post());
 
-    expect(discord.sent).toEqual(['**alice_01**: こんにちは']);
+    expect(discord.sent).toEqual(['**alice_01**: Hello\n> こんにちは']);
   });
 
   it.each([
@@ -98,5 +103,28 @@ describe('DiscordTranslationPublisher', () => {
 
     expect(failure).toBeInstanceOf(PublishFailed);
     expect((failure as PublishFailed).cause).toBe(cause);
+  });
+});
+
+describe('postText', () => {
+  it('quotes each translation below what was said, in order', () => {
+    const translations = [
+      { language: JA, text: '皆さん、こんにちは' },
+      { language: KO, text: '여러분, 안녕하세요' },
+    ];
+
+    expect(postText('Alice', { original: 'Hello everyone', translations })).toBe(
+      '**Alice**: Hello everyone\n> 皆さん、こんにちは\n> 여러분, 안녕하세요'
+    );
+  });
+
+  it('quotes every line of a translation', () => {
+    expect(postText('Alice', { original: 'Hello. Thanks.', translations: [{ language: JA, text: 'こんにちは。\nありがとう。' }] })).toBe(
+      '**Alice**: Hello. Thanks.\n> こんにちは。\n> ありがとう。'
+    );
+  });
+
+  it('posts only what was said when there is no translation to post', () => {
+    expect(postText('Alice', { original: 'こんにちは', translations: [] })).toBe('**Alice**: こんにちは');
   });
 });

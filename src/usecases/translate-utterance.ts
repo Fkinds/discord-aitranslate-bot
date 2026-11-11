@@ -1,7 +1,7 @@
 import type { GuildId, UserId } from '../domain/discord-ids';
 import type { SpeechAudio } from './ports/speech-audio';
 import type { TranslationPublisher } from './ports/translation-publisher';
-import type { Translation, Translator } from './ports/translator';
+import type { SpeechTranslation, Translator } from './ports/translator';
 import type { SessionStore } from './session-store';
 
 export interface TranslateUtteranceCommand {
@@ -12,7 +12,7 @@ export interface TranslateUtteranceCommand {
 }
 
 export type TranslateUtteranceResult =
-  | { readonly kind: 'posted'; readonly translation: Translation }
+  | { readonly kind: 'posted'; readonly translation: SpeechTranslation }
   | { readonly kind: 'nothingHeard' }
   | { readonly kind: 'notRunning' };
 
@@ -47,20 +47,14 @@ export class TranslateUtterance {
     const heard = await this.translator.translate(audio, session.languages);
     if (heard.original.trim() === '') return { kind: 'nothingHeard' };
 
-    // Until the post carries every translation, it carries the first one to
-    // post, or what was said when there is none to post.
-    const [target] = session.languages.targetsFor(heard.spokenLanguage);
-    const translation: Translation = {
-      original: heard.original,
-      translated: heard.translations.find(({ language }) => target?.equals(language))?.text ?? heard.original,
-      detectedLanguage: heard.spokenLanguage?.tag ?? 'other',
-    };
+    const targets = session.languages.targetsFor(heard.spokenLanguage);
     await this.publisher.publish({
       guildId: session.guildId,
       textChannelId: session.textChannelId,
       speakerId: command.speakerId,
-      translation,
+      original: heard.original,
+      translations: heard.translations.filter(({ language }) => targets.some((target) => target.equals(language))),
     });
-    return { kind: 'posted', translation };
+    return { kind: 'posted', translation: heard };
   }
 }
