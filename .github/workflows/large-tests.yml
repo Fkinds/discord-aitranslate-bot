@@ -1,0 +1,54 @@
+# Run the large tests, which call real outside services (jest.config.js), by
+# hand, every Monday at 09:00 JST, and when main changes what they depend on.
+#
+# They need GOOGLE_GEMINI_API_KEY from the large-tests environment, which
+# only main may use (.github/repository-settings.yml). So they never run on
+# pull requests and never block them; GitHub notifies a failed run as usual.
+name: large-tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays at 00:00 UTC, 09:00 JST.
+    - cron: "0 0 * * 1"
+  push:
+    branches: [main]
+    # What the Gemini test runs through, and the dependencies, which
+    # Renovate updates.
+    paths:
+      - "src/infrastructure/gemini/**"
+      - "src/infrastructure/discord/speech-conversion.ts"
+      - "src/usecases/ports/translator.ts"
+      - "src/domain/language-code.ts"
+      - "src/domain/translation-languages.ts"
+      - "src/main.ts"
+      - "tests/large/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/large-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: large-tests
+  cancel-in-progress: false
+
+jobs:
+  large:
+    name: large (node 26)
+    runs-on: ubuntu-24.04
+    environment: large-tests
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          runtime: node@26
+          cache: true
+          require-lockfile: true
+      - run: pnpm test:large
+        env:
+          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}

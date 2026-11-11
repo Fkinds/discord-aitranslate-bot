@@ -7,12 +7,15 @@ const path = require('node:path');
 //   small   in-process only: no network, file I/O, real time or sleeping.
 //           Real libraries are fine as long as they do no I/O.
 //   medium  this machine only: servers on localhost, no other host.
+//   large   real outside services, such as the Gemini API. Not run on pull
+//           requests (.github/workflows/large-tests.yml).
 //
 // The first directory under tests/ is the size. Network access is enforced
 // per size by tests/support/network-policy-environment.js.
 const SIZES = {
   small: { network: 'none' },
   medium: { network: 'loopback' },
+  large: { network: 'any' },
 };
 
 // Refuse to run while any test file sits outside tests/<size>/, so that no
