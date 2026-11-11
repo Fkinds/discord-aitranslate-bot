@@ -1,7 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals';
 import { toSpeechAudio } from '../../../../src/infrastructure/discord/speech-conversion';
-import { AudioProcessor } from '../../../../src/voice/audio-processor';
-import { createMockLogger } from '../../../helpers/mocks';
 
 /** 48 kHz stereo PCM from [left, right] frames. */
 function stereo(...frames: Array<[number, number]>): Buffer {
@@ -33,18 +31,5 @@ describe('toSpeechAudio', () => {
 
   it('turns no audio into empty speech', () => {
     expect(toSpeechAudio(Buffer.alloc(0)).isEmpty).toBe(true);
-  });
-
-  // Removed together with src/voice in CA-8.
-  it('gives the same samples as the old AudioProcessor.resample', async () => {
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    let seed = 42;
-    const next = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31);
-    const frames = Array.from({ length: 4801 }, (): [number, number] => [(next() % 65_536) - 32_768, (next() % 65_536) - 32_768]);
-    const pcm = stereo(...frames);
-
-    const old = await new AudioProcessor(createMockLogger()).resample(pcm, 48_000, 16_000);
-
-    expect(samples(toSpeechAudio(pcm).pcm)).toEqual(samples(old));
   });
 });
