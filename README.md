@@ -349,7 +349,7 @@ All configuration is done through environment variables:
 | `GOOGLE_GEMINI_API_KEY` | Gemini API key | Required |
 | `DEFAULT_TARGET_LANGUAGE` | Default translation target | `ja` |
 | `LOG_LEVEL` | Logging level | `info` |
-| `GEMINI_MODEL` | Gemini model to use | `gemini-2.0-flash-exp` |
+| `GEMINI_MODEL` | Gemini model to use | `gemini-3.8-flash` |
 
 ## 🎬 How It Works
 
