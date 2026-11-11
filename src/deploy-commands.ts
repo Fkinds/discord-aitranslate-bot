@@ -1,6 +1,7 @@
-import { REST, Routes } from 'discord.js';
+import { REST } from 'discord.js';
 import dotenv from 'dotenv';
 import { readConfig } from './infrastructure/config';
+import { registerCommands } from './infrastructure/discord/command-registry';
 import { createLogger } from './infrastructure/winston-logger';
 import { COMMANDS } from './interfaces/discord/commands';
 
@@ -15,9 +16,7 @@ async function deployCommands(): Promise<void> {
 
   try {
     logger.info(`Deploying ${COMMANDS.length} commands...`);
-    const deployed = (await rest.put(Routes.applicationCommands(config.discordClientId), {
-      body: COMMANDS,
-    })) as Array<{ name: string; description: string }>;
+    const deployed = await registerCommands(rest, config.discordClientId, COMMANDS);
 
     logger.info(`Successfully deployed ${deployed.length} commands globally`);
     for (const command of deployed) logger.info(`  - /${command.name}: ${command.description}`);
