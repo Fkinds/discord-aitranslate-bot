@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import { ChannelId, GuildId, UserId } from '../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../src/domain/language-code';
+import { TranslationLanguages } from '../../../src/domain/translation-languages';
 import { TranslationSession } from '../../../src/domain/translation-session';
 
 const STARTED_AT = new Date('2026-11-11T09:00:00Z');
@@ -46,6 +47,41 @@ describe('TranslationSession', () => {
 
     it('is frozen', () => {
       expect(Object.isFrozen(startSession())).toBe(true);
+    });
+  });
+
+  describe('languages', () => {
+    const JA_KO = TranslationLanguages.of(LanguageCode.of('ja'), LanguageCode.of('ko'));
+
+    it('starts with the languages given', () => {
+      const session = TranslationSession.start({
+        guildId: GuildId.of('1'),
+        voiceChannelId: ChannelId.of('10'),
+        textChannelId: ChannelId.of('20'),
+        languages: JA_KO,
+        startedAt: STARTED_AT,
+      });
+
+      expect(session.languages.equals(JA_KO)).toBe(true);
+    });
+
+    it('takes a target language, until its callers have moved, as that one language', () => {
+      expect(startSession().languages.equals(TranslationLanguages.of(LanguageCode.of('ja')))).toBe(true);
+    });
+
+    it('returns a session with other languages, keeping who is speaking, and leaves this one as it was', () => {
+      const session = startSession().speakerStarted(UserId.of('100'));
+
+      const changed = session.changeLanguages(JA_KO);
+
+      expect(changed.languages.equals(JA_KO)).toBe(true);
+      expect(changed.activeSpeakers.map((id) => id.value)).toEqual(['100']);
+      expect(session.languages.isPair).toBe(false);
+      expect(changed.equals(session)).toBe(true);
+    });
+
+    it('gives the first of a pair as the target language, until its callers have moved', () => {
+      expect(startSession().changeLanguages(JA_KO).targetLanguage.tag).toBe('ja');
     });
   });
 

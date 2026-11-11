@@ -1,12 +1,13 @@
 import type { ChannelId, GuildId, UserId } from './discord-ids';
 import type { LanguageCode } from './language-code';
 import { Entity } from './shared/entity';
+import { TranslationLanguages } from './translation-languages';
 import { frozen } from './shared/value-object';
 
 interface SessionState {
   readonly voiceChannelId: ChannelId;
   readonly textChannelId: ChannelId;
-  readonly targetLanguage: LanguageCode;
+  readonly languages: TranslationLanguages;
   readonly startedAtMs: number;
   /** Keyed by the user ID's value, so that equal IDs are one entry. */
   readonly activeSpeakers: ReadonlyMap<string, UserId>;
@@ -27,16 +28,20 @@ export class TranslationSession extends Entity<GuildId> {
     super(guildId);
   }
 
-  static start(params: {
-    guildId: GuildId;
-    voiceChannelId: ChannelId;
-    textChannelId: ChannelId;
-    targetLanguage: LanguageCode;
-    startedAt: Date;
-  }): TranslationSession {
-    const { guildId, startedAt, ...channelsAndLanguage } = params;
+  /** Takes `targetLanguage` until every caller passes `languages`; see targetLanguage. */
+  static start(
+    params: {
+      guildId: GuildId;
+      voiceChannelId: ChannelId;
+      textChannelId: ChannelId;
+      startedAt: Date;
+    } & ({ languages: TranslationLanguages } | { targetLanguage: LanguageCode })
+  ): TranslationSession {
+    const { guildId, voiceChannelId, textChannelId, startedAt } = params;
     return TranslationSession.build(guildId, {
-      ...channelsAndLanguage,
+      voiceChannelId,
+      textChannelId,
+      languages: 'languages' in params ? params.languages : TranslationLanguages.of(params.targetLanguage),
       startedAtMs: startedAt.getTime(),
       activeSpeakers: new Map(),
     });
@@ -58,8 +63,16 @@ export class TranslationSession extends Entity<GuildId> {
     return this.state.textChannelId;
   }
 
+  get languages(): TranslationLanguages {
+    return this.state.languages;
+  }
+
+  /**
+   * The first of the languages.
+   * @deprecated Use languages; this goes once its callers have moved.
+   */
   get targetLanguage(): LanguageCode {
-    return this.state.targetLanguage;
+    return this.state.languages.first;
   }
 
   get startedAt(): Date {
@@ -75,8 +88,13 @@ export class TranslationSession extends Entity<GuildId> {
     return Math.max(0, now.getTime() - this.state.startedAtMs);
   }
 
+  changeLanguages(languages: TranslationLanguages): TranslationSession {
+    return TranslationSession.build(this.id, { ...this.state, languages });
+  }
+
+  /** @deprecated Use changeLanguages; this goes once its callers have moved. */
   changeTargetLanguage(language: LanguageCode): TranslationSession {
-    return TranslationSession.build(this.id, { ...this.state, targetLanguage: language });
+    return this.changeLanguages(TranslationLanguages.of(language));
   }
 
   /** A user started speaking. Saying it again changes nothing. */
