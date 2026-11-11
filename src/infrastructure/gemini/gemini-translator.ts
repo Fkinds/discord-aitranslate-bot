@@ -11,10 +11,13 @@ export interface GeminiModel {
   generateContent(parts: Part[]): Promise<{ response: { text(): string } }>;
 }
 
-/** The Gemini model to translate with. */
-export function geminiModel(apiKey: string, modelName: string): GeminiModel {
+/**
+ * The Gemini model to translate with.
+ * @param baseUrl where the Gemini API is; Google's endpoint when omitted.
+ */
+export function geminiModel(apiKey: string, modelName: string, baseUrl?: string): GeminiModel {
   if (apiKey.trim() === '') throw new Error('Gemini API key is required');
-  return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: modelName });
+  return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: modelName }, baseUrl ? { baseUrl } : undefined);
 }
 
 export interface RetryPolicy {
