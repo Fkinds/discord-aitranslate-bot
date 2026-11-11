@@ -1,16 +1,24 @@
 import { type GenerateContentResponse, GoogleGenAI, type Part } from '@google/genai';
-import type { LanguageCode } from '../../domain/language-code';
+import type { TranslationLanguages } from '../../domain/translation-languages';
 import type { Logger } from '../../usecases/ports/logger';
 import type { SpeechAudio } from '../../usecases/ports/speech-audio';
-import { type Translation, TranslationFailed, type Translator } from '../../usecases/ports/translator';
+import { type SpeechTranslation, TranslationFailed, type Translator } from '../../usecases/ports/translator';
+import { answerSchemaFor, instructionsFor, readAnswer } from './gemini-answer';
 import { classifyFailure } from './gemini-failure';
-import { promptFor, readReply } from './gemini-reply';
 import { toWav } from './wav';
 
-/** The Gemini model, as this adapter uses it: parts in, the answer's text out. */
+/** The Gemini model, as this adapter uses it: parts in, the answer's text out, as JSON in the given schema. */
 export interface GeminiModel {
   /** @throws AnswerBlocked when the answer was blocked; whatever the SDK throws when the request fails. */
-  generateText(parts: Part[]): Promise<string>;
+  generateJson(parts: Part[], schema: Record<string, unknown>): Promise<string>;
+}
+
+/** Gemini answered, but in a form other than the one asked for. Asking again is not expected to help. */
+export class AnswerUnreadable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = new.target.name;
+  }
 }
 
 /** Gemini answered, but blocked the answer, for example for safety. Asking again gets the same. */
@@ -43,8 +51,14 @@ export function geminiModel(apiKey: string, modelName: string, { timeoutMs, base
     httpOptions: { timeout: timeoutMs, ...(baseUrl ? { baseUrl } : {}) },
   });
   return {
-    generateText: async (parts) =>
-      answerText(await ai.models.generateContent({ model: modelName, contents: [{ role: 'user', parts }] })),
+    generateJson: async (parts, schema) =>
+      answerText(
+        await ai.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts }],
+          config: { responseMimeType: 'application/json', responseJsonSchema: schema },
+        })
+      ),
   };
 }
 
@@ -87,8 +101,9 @@ export interface RetryPolicy {
 }
 
 /**
- * Translates speech with Gemini: the speech goes in as a WAVE file with a
- * prompt asking for JSON, and the reply is read by readReply().
+ * Translates speech with Gemini: the speech goes in as a WAVE file with the
+ * instructions, and the answer comes back as JSON in the schema of
+ * answerSchemaFor, read by readAnswer.
  *
  * A transient failure (see classifyFailure) is tried again under the retry
  * policy: after the wait Gemini asks for, or else after a wait that doubles
@@ -113,10 +128,10 @@ export class GeminiTranslator implements Translator {
     this.wait = wait ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
-  async translate(audio: SpeechAudio, targetLanguage: LanguageCode): Promise<Translation> {
+  async translate(audio: SpeechAudio, languages: TranslationLanguages): Promise<SpeechTranslation> {
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.translateOnce(audio, targetLanguage);
+        return await this.translateOnce(audio, languages);
       } catch (error) {
         const next = this.afterFailure(error, attempt);
         if ('giveUp' in next) throw new TranslationFailed(`Gemini failed to translate: ${next.giveUp}`, { cause: error });
@@ -143,21 +158,20 @@ export class GeminiTranslator implements Translator {
     return { retryAfterMs: failure.advisedDelayMs };
   }
 
-  private async translateOnce(audio: SpeechAudio, targetLanguage: LanguageCode): Promise<Translation> {
-    const text = await this.model.generateText([
-      { text: promptFor(targetLanguage) },
-      { inlineData: { mimeType: 'audio/wav', data: toWav(audio).toString('base64') } },
-    ]);
+  private async translateOnce(audio: SpeechAudio, languages: TranslationLanguages): Promise<SpeechTranslation> {
+    const text = await this.model.generateJson(
+      [{ text: instructionsFor(languages) }, { inlineData: { mimeType: 'audio/wav', data: toWav(audio).toString('base64') } }],
+      answerSchemaFor(languages)
+    );
 
-    const reply = readReply(text);
-    if (reply.kind === 'unreadable') {
-      this.logger.warn('Failed to parse JSON response, using fallback', { reason: reply.reason, responseText: text });
-    }
+    const read = readAnswer(text, languages);
+    if (read.kind === 'unreadable') throw new AnswerUnreadable(`${read.reason}: ${text}`);
+    const { transcription, spokenLanguage, translations, confidence } = read.answer;
     this.logger.info('Translation completed', {
-      targetLanguage: targetLanguage.tag,
-      detectedLanguage: reply.translation.detectedLanguage,
-      confidence: reply.kind === 'json' ? reply.confidence : undefined,
+      languages: languages.toString(),
+      spokenLanguage: spokenLanguage?.tag ?? 'other',
+      confidence,
     });
-    return reply.translation;
+    return { original: transcription, spokenLanguage, translations };
   }
 }

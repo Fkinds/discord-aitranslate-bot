@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { LanguageCode } from '../../../../src/domain/language-code';
-import { promptFor } from '../../../../src/infrastructure/gemini/gemini-reply';
+import { TranslationLanguages } from '../../../../src/domain/translation-languages';
+import { answerSchemaFor, instructionsFor } from '../../../../src/infrastructure/gemini/gemini-answer';
 import { GeminiTranslator, geminiModel } from '../../../../src/infrastructure/gemini/gemini-translator';
 import { toWav } from '../../../../src/infrastructure/gemini/wav';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
@@ -9,8 +10,8 @@ import { FakeLogger } from '../../../support/fakes/fake-logger';
 import { HttpStub, type StubResponse } from '../../../support/http-stub';
 
 const SPEECH = SpeechAudio.fromPcm(new Uint8Array([1, 2, 3, 4]));
-const JA = LanguageCode.of('ja');
-const REPLY = JSON.stringify({ transcription: 'Hello', translation: 'こんにちは', detectedLanguage: 'en', confidence: 0.9 });
+const JA_KO = TranslationLanguages.of(LanguageCode.of('ja'), LanguageCode.of('ko'));
+const REPLY = JSON.stringify({ transcription: 'Hello', spokenLanguage: 'other', translations: { ja: 'こんにちは', ko: '안녕하세요' } });
 
 /** A generateContent answer whose text is `text`. */
 const answer = (text: string): StubResponse => ({
@@ -40,12 +41,14 @@ describe('GeminiTranslator over HTTP', () => {
     await gemini.stop();
   });
 
-  it('sends the prompt and the speech to generateContent with the API key, and reads the answer', async () => {
+  it('sends the instructions, the speech and the answer schema to generateContent with the API key, and reads the answer', async () => {
     gemini.respond(answer(REPLY));
 
-    const translation = await translator.translate(SPEECH, JA);
+    const translation = await translator.translate(SPEECH, JA_KO);
 
-    expect(translation).toEqual({ original: 'Hello', translated: 'こんにちは', detectedLanguage: 'en' });
+    expect(translation.original).toBe('Hello');
+    expect(translation.spokenLanguage).toBeNull();
+    expect(translation.translations.map(({ text }) => text)).toEqual(['こんにちは', '안녕하세요']);
     expect(gemini.requests).toHaveLength(1);
     const [request] = gemini.requests;
     expect(request?.method).toBe('POST');
@@ -56,23 +59,24 @@ describe('GeminiTranslator over HTTP', () => {
       contents: [
         {
           role: 'user',
-          parts: [{ text: promptFor(JA) }, { inlineData: { mimeType: 'audio/wav', data: toWav(SPEECH).toString('base64') } }],
+          parts: [{ text: instructionsFor(JA_KO) }, { inlineData: { mimeType: 'audio/wav', data: toWav(SPEECH).toString('base64') } }],
         },
       ],
+      generationConfig: { responseMimeType: 'application/json', responseJsonSchema: answerSchemaFor(JA_KO) },
     });
   });
 
   it('tries again after a server error', async () => {
     gemini.respond(failure(503, 'UNAVAILABLE'), answer(REPLY));
 
-    await expect(translator.translate(SPEECH, JA)).resolves.toMatchObject({ translated: 'こんにちは' });
+    await expect(translator.translate(SPEECH, JA_KO)).resolves.toMatchObject({ original: 'Hello' });
     expect(gemini.requests).toHaveLength(2);
   });
 
   it('gives up at once on a refused request', async () => {
     gemini.respond(failure(400, 'INVALID_ARGUMENT'), answer(REPLY));
 
-    const error = await translator.translate(SPEECH, JA).catch((e: unknown) => e);
+    const error = await translator.translate(SPEECH, JA_KO).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(TranslationFailed);
     expect(String((error as TranslationFailed).cause)).toContain('400');
@@ -82,7 +86,7 @@ describe('GeminiTranslator over HTTP', () => {
   it('gives up at once on a blocked answer, which has no text', async () => {
     gemini.respond({ status: 200, body: { promptFeedback: { blockReason: 'SAFETY' } } }, answer(REPLY));
 
-    const error = await translator.translate(SPEECH, JA).catch((e: unknown) => e);
+    const error = await translator.translate(SPEECH, JA_KO).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(TranslationFailed);
     expect(String((error as TranslationFailed).cause)).toContain('SAFETY');
@@ -96,14 +100,14 @@ describe('GeminiTranslator over HTTP', () => {
       answer(REPLY)
     );
 
-    await expect(translator.translate(SPEECH, JA)).rejects.toThrow('asked to wait 30000 ms');
+    await expect(translator.translate(SPEECH, JA_KO)).rejects.toThrow('asked to wait 30000 ms');
     expect(gemini.requests).toHaveLength(1);
   });
 
   it('abandons a request that takes too long, and tries again', async () => {
     gemini.respond({ ...answer(REPLY), delayMs: 1000 }, answer(REPLY));
 
-    await expect(translator.translate(SPEECH, JA)).resolves.toMatchObject({ translated: 'こんにちは' });
+    await expect(translator.translate(SPEECH, JA_KO)).resolves.toMatchObject({ original: 'Hello' });
     expect(gemini.requests).toHaveLength(2);
   });
 });
