@@ -1,7 +1,18 @@
 import type { LanguageCode } from '../../domain/language-code';
+import type { TranslationLanguages } from '../../domain/translation-languages';
 import type { SpeechAudio } from './speech-audio';
 
-/** What a speaker said, and its translation. */
+/** What the translator heard in the speech, and what it says in each of the session's languages. */
+export interface SpeechTranslation {
+  /** What was said, word for word, in the language it was said in; empty when nothing was said. */
+  readonly original: string;
+  /** The session's language that was spoken, or null for another language or when it is not known. */
+  readonly spokenLanguage: LanguageCode | null;
+  /** What was said, in each of the session's languages, in their order. */
+  readonly translations: ReadonlyArray<{ readonly language: LanguageCode; readonly text: string }>;
+}
+
+/** What a speaker said, and its translation, as posted. */
 export interface Translation {
   /** What was said, as heard, in the language it was said in. */
   readonly original: string;
@@ -19,11 +30,11 @@ export class TranslationFailed extends Error {
   }
 }
 
-/** Turns speech into text in another language. */
+/** Turns speech into text in other languages. */
 export interface Translator {
   /**
-   * Transcribe the speech and translate it into the target language.
+   * Transcribe the speech and translate it into each of the languages.
    * @throws TranslationFailed when it cannot be translated.
    */
-  translate(audio: SpeechAudio, targetLanguage: LanguageCode): Promise<Translation>;
+  translate(audio: SpeechAudio, languages: TranslationLanguages): Promise<SpeechTranslation>;
 }

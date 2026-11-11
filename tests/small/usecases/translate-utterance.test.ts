@@ -40,8 +40,8 @@ describe('TranslateUtterance', () => {
 
     const result = await translateUtterance.execute(utterance());
 
-    expect(translator.requests).toEqual([{ bytes: 3200, targetLanguage: 'ko' }]);
-    const translation = { original: '3200 bytes of speech', translated: 'translated into ko', detectedLanguage: 'en' };
+    expect(translator.requests).toEqual([{ bytes: 3200, languages: 'ko' }]);
+    const translation = { original: '3200 bytes of speech', translated: 'translated into ko', detectedLanguage: 'other' };
     expect(result).toEqual({ kind: 'posted', translation });
     expect(publisher.posts).toHaveLength(1);
     const [post] = publisher.posts;
@@ -61,7 +61,7 @@ describe('TranslateUtterance', () => {
     speech.resolve(SPEECH);
     await pending;
 
-    expect(translator.requests[0]?.targetLanguage).toBe('ja');
+    expect(translator.requests[0]?.languages).toBe('ja');
   });
 
   it('still posts what was said before the translation stopped, as the bot always has', async () => {
@@ -74,6 +74,38 @@ describe('TranslateUtterance', () => {
 
     await expect(pending).resolves.toMatchObject({ kind: 'posted' });
     expect(publisher.posts[0]?.textChannelId.value).toBe('20');
+  });
+
+  it.each([
+    ['one language of a pair', 'ja', 'translated into ko'],
+    ['the other language of a pair', 'ko', 'translated into ja'],
+  ])('posts the translation into the other language when %s is spoken', async (_, spoken, posted) => {
+    sessions.save(aSession({ language: 'ja', second: 'ko' }));
+    translator.hears(LanguageCode.of(spoken));
+
+    await translateUtterance.execute(utterance());
+
+    expect(translator.requests).toEqual([{ bytes: 3200, languages: 'ja,ko' }]);
+    expect(publisher.posts[0]?.translation).toMatchObject({ translated: posted, detectedLanguage: spoken });
+  });
+
+  it("posts only what was said when it was said in the session's one language", async () => {
+    sessions.save(aSession({ language: 'ja' }));
+    translator.hears(LanguageCode.of('ja'));
+
+    await translateUtterance.execute(utterance());
+
+    expect(publisher.posts[0]?.translation).toMatchObject({ original: '3200 bytes of speech', translated: '3200 bytes of speech' });
+  });
+
+  it('posts nothing when the speech had no words in it', async () => {
+    sessions.save(aSession());
+    translator.hearsNothing();
+
+    const result = await translateUtterance.execute(utterance());
+
+    expect(result).toEqual({ kind: 'nothingHeard' });
+    expect(publisher.posts).toEqual([]);
   });
 
   it('posts nothing when nothing was heard', async () => {

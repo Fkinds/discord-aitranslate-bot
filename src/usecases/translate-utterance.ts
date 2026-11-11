@@ -24,6 +24,10 @@ export type TranslateUtteranceResult =
  * session as it is then decides the language and the channel: a language
  * changed while they speak applies from their next utterance, and what was
  * said before the translation stopped is still posted.
+ *
+ * The session's languages decide what is posted, by the language that was
+ * spoken (TranslationLanguages.targetsFor). Nothing is posted when nothing
+ * was said.
  */
 export class TranslateUtterance {
   constructor(
@@ -40,7 +44,17 @@ export class TranslateUtterance {
     if (!session) return { kind: 'notRunning' };
     if (audio.isEmpty) return { kind: 'nothingHeard' };
 
-    const translation = await this.translator.translate(audio, session.targetLanguage);
+    const heard = await this.translator.translate(audio, session.languages);
+    if (heard.original.trim() === '') return { kind: 'nothingHeard' };
+
+    // Until the post carries every translation, it carries the first one to
+    // post, or what was said when there is none to post.
+    const [target] = session.languages.targetsFor(heard.spokenLanguage);
+    const translation: Translation = {
+      original: heard.original,
+      translated: heard.translations.find(({ language }) => target?.equals(language))?.text ?? heard.original,
+      detectedLanguage: heard.spokenLanguage?.tag ?? 'other',
+    };
     await this.publisher.publish({
       guildId: session.guildId,
       textChannelId: session.textChannelId,

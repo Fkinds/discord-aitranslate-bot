@@ -1,8 +1,16 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { ApiError, type Part } from '@google/genai';
 import { LanguageCode } from '../../../../src/domain/language-code';
-import { promptFor } from '../../../../src/infrastructure/gemini/gemini-reply';
-import { AnswerBlocked, answerText, type GeminiModel, GeminiTranslator, geminiModel } from '../../../../src/infrastructure/gemini/gemini-translator';
+import { TranslationLanguages } from '../../../../src/domain/translation-languages';
+import { answerSchemaFor, instructionsFor } from '../../../../src/infrastructure/gemini/gemini-answer';
+import {
+  AnswerBlocked,
+  AnswerUnreadable,
+  answerText,
+  type GeminiModel,
+  GeminiTranslator,
+  geminiModel,
+} from '../../../../src/infrastructure/gemini/gemini-translator';
 import { toWav } from '../../../../src/infrastructure/gemini/wav';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
@@ -10,12 +18,12 @@ import { FakeLogger } from '../../../support/fakes/fake-logger';
 
 /** Answers each request with the next of the replies it was given; an Error is thrown. */
 class FakeGeminiModel implements GeminiModel {
-  readonly requests: Part[][] = [];
+  readonly requests: Array<{ parts: Part[]; schema: Record<string, unknown> }> = [];
 
   constructor(private readonly replies: Array<string | Error>) {}
 
-  async generateText(parts: Part[]): Promise<string> {
-    this.requests.push(parts);
+  async generateJson(parts: Part[], schema: Record<string, unknown>): Promise<string> {
+    this.requests.push({ parts, schema });
     const reply = this.replies.shift();
     if (reply === undefined) throw new Error('no reply left');
     if (reply instanceof Error) throw reply;
@@ -25,7 +33,14 @@ class FakeGeminiModel implements GeminiModel {
 
 const SPEECH = SpeechAudio.fromPcm(new Uint8Array([1, 2, 3, 4]));
 const JA = LanguageCode.of('ja');
-const REPLY = JSON.stringify({ transcription: 'Hello', translation: 'こんにちは', detectedLanguage: 'en', confidence: 0.9 });
+const KO = LanguageCode.of('ko');
+const JA_KO = TranslationLanguages.of(JA, KO);
+const REPLY = JSON.stringify({
+  transcription: '안녕하세요',
+  spokenLanguage: 'ko',
+  translations: { ja: 'こんにちは', ko: '안녕하세요' },
+  confidence: 0.9,
+});
 const unavailable = () => new ApiError({ status: 503, message: '{"error":{"code":503,"status":"UNAVAILABLE"}}' });
 const tooManyRequests = (retryDelay: string) =>
   new ApiError({
@@ -50,31 +65,44 @@ describe('GeminiTranslator', () => {
     waits = [];
   });
 
-  it('sends the prompt and the speech as a WAVE file, and returns the translation', async () => {
+  it('sends the instructions and the speech as a WAVE file, asks for the answer schema, and reads the answer', async () => {
     const model = new FakeGeminiModel([REPLY]);
 
-    const translation = await translatorFor(model).translate(SPEECH, JA);
+    const translation = await translatorFor(model).translate(SPEECH, JA_KO);
 
     expect(model.requests).toEqual([
-      [{ text: promptFor(JA) }, { inlineData: { mimeType: 'audio/wav', data: toWav(SPEECH).toString('base64') } }],
+      {
+        parts: [{ text: instructionsFor(JA_KO) }, { inlineData: { mimeType: 'audio/wav', data: toWav(SPEECH).toString('base64') } }],
+        schema: answerSchemaFor(JA_KO),
+      },
     ]);
-    expect(translation).toEqual({ original: 'Hello', translated: 'こんにちは', detectedLanguage: 'en' });
+    expect(translation.original).toBe('안녕하세요');
+    expect(translation.spokenLanguage?.equals(KO)).toBe(true);
+    expect(translation.translations.map(({ language, text }) => [language.tag, text])).toEqual([
+      ['ja', 'こんにちは'],
+      ['ko', '안녕하세요'],
+    ]);
     expect(logger.messages('info')).toEqual(['Translation completed']);
   });
 
-  it('logs a reply it cannot read, and takes it as the translation', async () => {
-    const translation = await translatorFor(new FakeGeminiModel(['こんにちは'])).translate(SPEECH, JA);
+  it('gives up at once on an answer it cannot read, rather than post it', async () => {
+    const model = new FakeGeminiModel(['こんにちは', REPLY]);
 
-    expect(translation.translated).toBe('こんにちは');
-    expect(logger.messages('warn')).toEqual(['Failed to parse JSON response, using fallback']);
+    const failure = await translatorFor(model)
+      .translate(SPEECH, JA_KO)
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(TranslationFailed);
+    expect((failure as TranslationFailed).cause).toBeInstanceOf(AnswerUnreadable);
+    expect(model.requests).toHaveLength(1);
   });
 
   it('tries a transient failure again, waiting 1 s and then 2 s', async () => {
     const model = new FakeGeminiModel([unavailable(), new TypeError('fetch failed'), REPLY]);
 
-    const translation = await translatorFor(model).translate(SPEECH, JA);
+    const translation = await translatorFor(model).translate(SPEECH, JA_KO);
 
-    expect(translation.translated).toBe('こんにちは');
+    expect(translation.original).toBe('안녕하세요');
     expect(model.requests).toHaveLength(3);
     expect(waits).toEqual([1000, 2000]);
     expect(logger.messages('warn')).toEqual(['Translation failed, retrying', 'Translation failed, retrying']);
@@ -85,7 +113,7 @@ describe('GeminiTranslator', () => {
     const model = new FakeGeminiModel([unavailable(), unavailable(), last]);
 
     const failure = await translatorFor(model)
-      .translate(SPEECH, JA)
+      .translate(SPEECH, JA_KO)
       .catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(TranslationFailed);
@@ -101,7 +129,7 @@ describe('GeminiTranslator', () => {
     const model = new FakeGeminiModel([error, REPLY]);
 
     const failure = await translatorFor(model)
-      .translate(SPEECH, JA)
+      .translate(SPEECH, JA_KO)
       .catch((e: unknown) => e);
 
     expect(failure).toBeInstanceOf(TranslationFailed);
@@ -113,14 +141,14 @@ describe('GeminiTranslator', () => {
   it('waits as long as Gemini asks, when that is at most 5 s', async () => {
     const model = new FakeGeminiModel([tooManyRequests('5s'), REPLY]);
 
-    await expect(translatorFor(model).translate(SPEECH, JA)).resolves.toMatchObject({ translated: 'こんにちは' });
+    await expect(translatorFor(model).translate(SPEECH, JA_KO)).resolves.toMatchObject({ original: '안녕하세요' });
     expect(waits).toEqual([5000]);
   });
 
   it('gives up at once when Gemini asks to wait longer than 5 s', async () => {
     const model = new FakeGeminiModel([tooManyRequests('5.001s'), REPLY]);
 
-    await expect(translatorFor(model).translate(SPEECH, JA)).rejects.toThrow('asked to wait 5001 ms');
+    await expect(translatorFor(model).translate(SPEECH, JA_KO)).rejects.toThrow('asked to wait 5001 ms');
     expect(model.requests).toHaveLength(1);
     expect(waits).toEqual([]);
   });
@@ -128,7 +156,7 @@ describe('GeminiTranslator', () => {
   it('tries once when the policy says one attempt', async () => {
     const model = new FakeGeminiModel([unavailable()]);
 
-    await expect(translatorFor(model, 1).translate(SPEECH, JA)).rejects.toThrow(TranslationFailed);
+    await expect(translatorFor(model, 1).translate(SPEECH, JA_KO)).rejects.toThrow(TranslationFailed);
     expect(waits).toEqual([]);
   });
 
@@ -153,7 +181,7 @@ describe('geminiModel', () => {
   });
 
   it('makes a model without connecting', () => {
-    expect(typeof geminiModel('test-key', 'gemini-3.8-flash', { timeoutMs: 15_000 }).generateText).toBe('function');
+    expect(typeof geminiModel('test-key', 'gemini-3.8-flash', { timeoutMs: 15_000 }).generateJson).toBe('function');
   });
 });
 
