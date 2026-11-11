@@ -5,20 +5,20 @@
 echo "Stopping all bot processes..."
 
 # Stop all bot processes (not just the one in PID file)
-EXISTING_PIDS=$(pgrep -f "node.*dist/index.js" || true)
+EXISTING_PIDS=$(pgrep -f "node.*dist/main.js" || true)
 if [ ! -z "$EXISTING_PIDS" ]; then
     echo "Found bot processes: $EXISTING_PIDS"
 
     # Try graceful shutdown first
-    pkill -TERM -f "node.*dist/index.js" || true
+    pkill -TERM -f "node.*dist/main.js" || true
     sleep 2
 
     # Force kill any remaining processes
-    REMAINING=$(pgrep -f "node.*dist/index.js" || true)
+    REMAINING=$(pgrep -f "node.*dist/main.js" || true)
     if [ ! -z "$REMAINING" ]; then
         echo "Force killing remaining processes..."
-        pkill -9 -f "node.*dist/index.js" || true
-        pkill -9 -f "sh -c node.*dist/index.js" || true
+        pkill -9 -f "node.*dist/main.js" || true
+        pkill -9 -f "sh -c node.*dist/main.js" || true
         sleep 1
     fi
 
