@@ -1,6 +1,7 @@
 import { type ChatInputCommandInteraction, type GuildMember, MessageFlags } from 'discord.js';
 import { ChannelId, GuildId } from '../../domain/discord-ids';
 import { LanguageCode } from '../../domain/language-code';
+import type { TranslationLanguages } from '../../domain/translation-languages';
 import type { ChangeTargetLanguage } from '../../usecases/change-target-language';
 import type { GetTranslationStatus } from '../../usecases/get-translation-status';
 import type { Clock } from '../../usecases/ports/clock';
@@ -9,7 +10,7 @@ import { VoiceConnectionFailed } from '../../usecases/ports/voice-connector';
 import type { StartTranslation } from '../../usecases/start-translation';
 import type { StopTranslation } from '../../usecases/stop-translation';
 import { unreachable } from '../unreachable';
-import { COMMAND, LANGUAGE_OPTION } from './commands';
+import { COMMAND, LANGUAGE_OPTION, SECOND_LANGUAGE_OPTION } from './commands';
 import { statusEmbed } from './status-embed';
 
 export interface CommandUseCases {
@@ -21,16 +22,24 @@ export interface CommandUseCases {
 
 type Interaction = ChatInputCommandInteraction;
 
+const SAME_LANGUAGE_TWICE = '❌ Choose two different languages';
+
 /**
  * Handles the slash commands: reads the interaction into a use case's
  * command, runs the use case, and answers the member who asked. Answers are
- * visible only to that member.
+ * visible only to that member; only the notice that translation started is
+ * visible to everyone.
  */
 export class CommandHandler {
+  /**
+   * @param startNotice says, to everyone in the text channel when translation
+   *   starts, where what is said goes.
+   */
   constructor(
     private readonly useCases: CommandUseCases,
     private readonly clock: Clock,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly startNotice: string
   ) {}
 
   /** Never throws: a failure is logged and the member is told. */
@@ -66,14 +75,13 @@ export class CommandHandler {
     // Joining can take longer than Discord waits for an answer, so say so first.
     if (voiceChannel) await answer(interaction, `🔄 Connecting to **${voiceChannel.name}**...`);
 
-    const language = interaction.options.getString(LANGUAGE_OPTION);
     let result;
     try {
       result = await this.useCases.startTranslation.execute({
         guildId,
         requesterVoiceChannelId: voiceChannel ? ChannelId.of(voiceChannel.id) : null,
         textChannelId: ChannelId.of(interaction.channelId),
-        targetLanguage: language ? LanguageCode.of(language) : undefined,
+        ...chosenLanguages(interaction),
       });
     } catch (error) {
       if (!(error instanceof VoiceConnectionFailed)) throw error;
@@ -87,17 +95,36 @@ export class CommandHandler {
         this.logger.info('Successfully joined voice channel', {
           guildId: guildId.value,
           channelId: session.voiceChannelId.value,
-          targetLanguage: session.targetLanguage.tag,
+          languages: session.languages.toString(),
         });
         const channel = voiceChannel ? `**${voiceChannel.name}**` : `<#${session.voiceChannelId.value}>`;
-        return answer(interaction, `✅ Now translating in ${channel} to **${session.targetLanguage.displayName}**`);
+        await answer(interaction, `✅ Now translating in ${channel} ${intoLanguages(session.languages)}`);
+        return this.announceStart(interaction, session.voiceChannelId, session.languages);
       }
+      case 'sameLanguageTwice':
+        return answer(interaction, SAME_LANGUAGE_TWICE);
       case 'requesterNotInVoiceChannel':
         return answer(interaction, '❌ You need to be in a voice channel first!');
       case 'alreadyRunning':
         return answer(interaction, `❌ Already translating in <#${result.session.voiceChannelId.value}>`);
       default:
         return unreachable(result);
+    }
+  }
+
+  /**
+   * Tell everyone in the text channel that what is said in the voice channel
+   * is now translated, and where it goes. Translation has started either way,
+   * so a failure to post is logged, not answered.
+   */
+  private async announceStart(interaction: Interaction, voiceChannelId: ChannelId, languages: TranslationLanguages) {
+    try {
+      await interaction.followUp({
+        content: `🎙️ Translating <#${voiceChannelId.value}> ${intoLanguages(languages)}. ${this.startNotice}`,
+        allowedMentions: { parse: [] },
+      });
+    } catch (error) {
+      this.logger.error('Failed to post the notice that translation started', { error });
     }
   }
 
@@ -123,14 +150,24 @@ export class CommandHandler {
 
   private async changeLanguage(interaction: Interaction, guildId: GuildId): Promise<void> {
     const language = LanguageCode.of(interaction.options.getString(LANGUAGE_OPTION, true));
-    const result = this.useCases.changeTargetLanguage.execute({ guildId, language });
+    const { secondLanguage } = chosenLanguages(interaction);
+    const result = this.useCases.changeTargetLanguage.execute({ guildId, language, secondLanguage });
 
     switch (result.kind) {
-      case 'changed':
-        this.logger.info('Changed target language', { guildId: guildId.value, newLanguage: language.tag });
-        return answer(interaction, `🔄 Target language changed to **${result.session.targetLanguage.displayName}**`);
+      case 'changed': {
+        const { languages } = result.session;
+        this.logger.info('Changed target language', { guildId: guildId.value, languages: languages.toString() });
+        return answer(
+          interaction,
+          languages.isPair
+            ? `🔄 Now translating ${intoLanguages(languages)}`
+            : `🔄 Target language changed to **${languages.displayName}**`
+        );
+      }
       case 'notRunning':
         return answer(interaction, '❌ Not currently in a voice channel. Use `/translate-join` first');
+      case 'sameLanguageTwice':
+        return answer(interaction, SAME_LANGUAGE_TWICE);
       default:
         return unreachable(result);
     }
@@ -152,6 +189,22 @@ export class CommandHandler {
         return unreachable(result);
     }
   }
+}
+
+/** The languages chosen in the command's options, as the use cases take them. */
+function chosenLanguages(interaction: Interaction): { language?: LanguageCode; secondLanguage?: LanguageCode } {
+  const language = interaction.options.getString(LANGUAGE_OPTION);
+  const second = interaction.options.getString(SECOND_LANGUAGE_OPTION);
+  return {
+    ...(language ? { language: LanguageCode.of(language) } : {}),
+    ...(second ? { secondLanguage: LanguageCode.of(second) } : {}),
+  };
+}
+
+/** "to **Japanese (日本語)**", or for a pair "between **Japanese (日本語)** and **Korean (한국어)**". */
+function intoLanguages(languages: TranslationLanguages): string {
+  const [first, second] = languages.languages.map((language) => `**${language.displayName}**`);
+  return second ? `between ${first} and ${second}` : `to ${first}`;
 }
 
 /** Answer the member who asked: a first answer, or a change to it. */

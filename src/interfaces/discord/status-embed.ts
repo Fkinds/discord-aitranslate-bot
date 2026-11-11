@@ -16,7 +16,7 @@ export function statusEmbed(session: TranslationSession, uptimeMs: number, now: 
     .setTitle('📊 Translation Status')
     .addFields(
       { name: 'Status', value: '✅ Active', inline: true },
-      { name: 'Target Language', value: session.targetLanguage.displayName, inline: true },
+      { name: 'Target Language', value: session.languages.displayName, inline: true },
       { name: 'Uptime', value: formatUptime(uptimeMs), inline: true },
       { name: 'Active Users', value: String(session.activeSpeakers.length), inline: true },
       { name: 'Voice Channel', value: `<#${session.voiceChannelId.value}>`, inline: true },

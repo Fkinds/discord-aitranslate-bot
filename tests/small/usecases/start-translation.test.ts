@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { ChannelId, GuildId } from '../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../src/domain/language-code';
+import { TranslationLanguages } from '../../../src/domain/translation-languages';
 import { VoiceConnectionFailed } from '../../../src/usecases/ports/voice-connector';
 import { SessionStore } from '../../../src/usecases/session-store';
 import { StartTranslation } from '../../../src/usecases/start-translation';
@@ -12,17 +13,18 @@ describe('StartTranslation', () => {
   let voice: FakeVoiceConnector;
   let startTranslation: StartTranslation;
 
-  const command = (overrides: { voice?: string | null; language?: string } = {}) => ({
+  const command = (overrides: { voice?: string | null; language?: string; second?: string } = {}) => ({
     guildId: GuildId.of('1'),
     requesterVoiceChannelId: overrides.voice === null ? null : ChannelId.of(overrides.voice ?? '10'),
     textChannelId: ChannelId.of('20'),
-    targetLanguage: overrides.language ? LanguageCode.of(overrides.language) : undefined,
+    language: overrides.language ? LanguageCode.of(overrides.language) : undefined,
+    secondLanguage: overrides.second ? LanguageCode.of(overrides.second) : undefined,
   });
 
   beforeEach(() => {
     sessions = new SessionStore();
     voice = new FakeVoiceConnector();
-    startTranslation = new StartTranslation(sessions, voice, fixedClock(STARTED_AT), LanguageCode.of('ja'));
+    startTranslation = new StartTranslation(sessions, voice, fixedClock(STARTED_AT), TranslationLanguages.of(LanguageCode.of('ja')));
   });
 
   it("joins the requester's voice channel and starts a session", async () => {
@@ -41,6 +43,34 @@ describe('StartTranslation', () => {
     await startTranslation.execute(command());
 
     expect(sessions.find(GuildId.of('1'))?.targetLanguage.tag).toBe('ja');
+  });
+
+  it.each([
+    ['both languages of a pair', { language: 'en', second: 'ko' }, 'en,ko'],
+    ['the second language only, with the default first', { second: 'ko' }, 'ja,ko'],
+  ])('translates between %s', async (_, languages, expected) => {
+    await startTranslation.execute(command(languages));
+
+    expect(sessions.find(GuildId.of('1'))?.languages.toString()).toBe(expected);
+  });
+
+  it('translates between the default pair when none is given', async () => {
+    const defaultPair = TranslationLanguages.of(LanguageCode.of('ja'), LanguageCode.of('ko'));
+    const withPair = new StartTranslation(sessions, voice, fixedClock(STARTED_AT), defaultPair);
+
+    await withPair.execute(command());
+
+    expect(sessions.find(GuildId.of('1'))?.languages.toString()).toBe('ja,ko');
+  });
+
+  it.each([
+    ['given twice', { language: 'ko', second: 'ko' }],
+    ['given as the second that is the default first', { second: 'ja' }],
+  ])('refuses one language %s, and does not join', async (_, languages) => {
+    const result = await startTranslation.execute(command(languages));
+
+    expect(result).toEqual({ kind: 'sameLanguageTwice' });
+    expect(voice.joins).toEqual([]);
   });
 
   it('does nothing when the requester is not in a voice channel', async () => {

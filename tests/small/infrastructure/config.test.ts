@@ -20,7 +20,7 @@ describe('readConfig', () => {
     expect(config.discordToken).toBe('token');
     expect(config.discordClientId).toBe('123');
     expect(config.translator).toEqual({ kind: 'gemini', apiKey: 'key', model: 'gemini-2.5-flash' });
-    expect(config.defaultTargetLanguage.tag).toBe('en');
+    expect(config.defaultLanguages.toString()).toBe('en');
     expect(config.logLevel).toBe('debug');
   });
 
@@ -28,7 +28,7 @@ describe('readConfig', () => {
     const config = readConfig(REQUIRED);
 
     expect(config.translator).toEqual({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' });
-    expect(config.defaultTargetLanguage.tag).toBe('ja');
+    expect(config.defaultLanguages.toString()).toBe('ja');
     expect(config.logLevel).toBe('info');
   });
 
@@ -36,7 +36,7 @@ describe('readConfig', () => {
     const config = readConfig({ ...REQUIRED, TRANSLATOR: '', GEMINI_MODEL: '', DEFAULT_TARGET_LANGUAGE: '', LOG_LEVEL: '' });
 
     expect(config.translator).toMatchObject({ kind: 'gemini', model: 'gemini-3.8-flash' });
-    expect(config.defaultTargetLanguage.tag).toBe('ja');
+    expect(config.defaultLanguages.toString()).toBe('ja');
     expect(() => readConfig({ ...REQUIRED, DISCORD_BOT_TOKEN: '' })).toThrow('DISCORD_BOT_TOKEN');
   });
 
@@ -57,7 +57,22 @@ describe('readConfig', () => {
   });
 
   it('takes any well-formed language tag, in canonical form', () => {
-    expect(readConfig({ ...REQUIRED, DEFAULT_TARGET_LANGUAGE: 'ZH-tw' }).defaultTargetLanguage.tag).toBe('zh-TW');
+    expect(readConfig({ ...REQUIRED, DEFAULT_TARGET_LANGUAGE: 'ZH-tw' }).defaultLanguages.toString()).toBe('zh-TW');
+  });
+
+  it.each([
+    ['ja,ko', 'ja,ko'],
+    [' ja , KO ', 'ja,ko'],
+  ])('takes a pair of languages, %j', (value, languages) => {
+    expect(readConfig({ ...REQUIRED, DEFAULT_TARGET_LANGUAGE: value }).defaultLanguages.toString()).toBe(languages);
+  });
+
+  it.each([
+    ['ja,ja', /^DEFAULT_TARGET_LANGUAGE: A pair needs two different languages/],
+    ['ja,ko,en', /^DEFAULT_TARGET_LANGUAGE takes one language or two/],
+    ['ja,', /^DEFAULT_TARGET_LANGUAGE: /],
+  ])('rejects %j at startup', (value, message) => {
+    expect(() => readConfig({ ...REQUIRED, DEFAULT_TARGET_LANGUAGE: value })).toThrow(message);
   });
 
   it('rejects a malformed language tag at startup', () => {

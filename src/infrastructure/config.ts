@@ -1,5 +1,6 @@
 import { LanguageCode } from '../domain/language-code';
 import { DomainError } from '../domain/shared/domain-error';
+import { TranslationLanguages } from '../domain/translation-languages';
 
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -12,7 +13,8 @@ export interface Config {
   readonly discordToken: string;
   readonly discordClientId: string;
   readonly translator: TranslatorConfig;
-  readonly defaultTargetLanguage: LanguageCode;
+  /** The languages /translate-join translates into when none are chosen. */
+  readonly defaultLanguages: TranslationLanguages;
   readonly logLevel: LogLevel;
 }
 
@@ -60,14 +62,20 @@ export function readConfig(env: Env): Config {
       translatorKind === 'gemini'
         ? { kind: 'gemini', apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL }
         : { kind: 'fake' },
-    defaultTargetLanguage: languageFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja'),
+    defaultLanguages: languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja'),
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
   };
 }
 
-function languageFrom(tag: string): LanguageCode {
+/** One language tag, or two separated by a comma for a pair, such as "ja,ko". */
+function languagesFrom(value: string): TranslationLanguages {
+  const tags = value.split(',').map((tag) => tag.trim());
+  if (tags.length > 2) {
+    throw new ConfigError(`DEFAULT_TARGET_LANGUAGE takes one language or two, got ${JSON.stringify(value)}`);
+  }
   try {
-    return LanguageCode.of(tag);
+    const [first, second] = tags.map((tag) => LanguageCode.of(tag));
+    return TranslationLanguages.of(first!, second);
   } catch (error) {
     if (!(error instanceof DomainError)) throw error;
     throw new ConfigError(`DEFAULT_TARGET_LANGUAGE: ${error.message}`, { cause: error });

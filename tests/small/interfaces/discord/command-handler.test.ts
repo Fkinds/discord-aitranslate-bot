@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from '@jest/globals';
 import { type ChatInputCommandInteraction, type EmbedBuilder, MessageFlags } from 'discord.js';
 import { GuildId } from '../../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../../src/domain/language-code';
+import { TranslationLanguages } from '../../../../src/domain/translation-languages';
 import { CommandHandler } from '../../../../src/interfaces/discord/command-handler';
 import { ChangeTargetLanguage } from '../../../../src/usecases/change-target-language';
 import { GetTranslationStatus } from '../../../../src/usecases/get-translation-status';
@@ -25,6 +26,9 @@ class FakeInteraction {
   replied = false;
   readonly deferred = false;
   readonly answers: Answer[] = [];
+  /** Messages posted for everyone in the channel. */
+  readonly notices: unknown[] = [];
+  noticeError: Error | undefined;
   readonly user = { id: '40' };
   readonly channelId = '20';
   readonly guildId: string | null;
@@ -58,9 +62,15 @@ class FakeInteraction {
   async editReply(options: Omit<Answer, 'via'>): Promise<void> {
     this.answers.push({ via: 'editReply', ...options });
   }
+
+  async followUp(options: unknown): Promise<void> {
+    if (this.noticeError) throw this.noticeError;
+    this.notices.push(options);
+  }
 }
 
 const GENERAL = { id: '10', name: 'General' };
+const NOTICE = 'What is said there is sent to Google Gemini to be translated.';
 const EPHEMERAL = MessageFlags.Ephemeral;
 
 describe('CommandHandler', () => {
@@ -81,13 +91,14 @@ describe('CommandHandler', () => {
     const clock = fixedClock(new Date(STARTED_AT.getTime() + 125_000));
     handler = new CommandHandler(
       {
-        startTranslation: new StartTranslation(sessions, voice, clock, LanguageCode.of('ja')),
+        startTranslation: new StartTranslation(sessions, voice, clock, TranslationLanguages.of(LanguageCode.of('ja'))),
         stopTranslation: new StopTranslation(sessions, voice),
         changeTargetLanguage: new ChangeTargetLanguage(sessions),
         getTranslationStatus: new GetTranslationStatus(sessions, clock),
       },
       clock,
-      logger
+      logger,
+      NOTICE
     );
   });
 
@@ -101,6 +112,52 @@ describe('CommandHandler', () => {
       ]);
       expect(voice.joins).toEqual([{ guildId: '1', voiceChannelId: '10' }]);
       expect(sessions.find(GuildId.of('1'))?.textChannelId.value).toBe('20');
+    });
+
+    it('tells everyone in the channel that it is translating, and where what is said goes', async () => {
+      const interaction = new FakeInteraction('translate-join', { voiceChannel: GENERAL, strings: { language: 'en' } });
+
+      await handle(interaction);
+
+      expect(interaction.notices).toEqual([
+        { content: `🎙️ Translating <#10> to **English**. ${NOTICE}`, allowedMentions: { parse: [] } },
+      ]);
+    });
+
+    it('translates between a pair of languages', async () => {
+      const interaction = new FakeInteraction('translate-join', {
+        voiceChannel: GENERAL,
+        strings: { language: 'ja', 'second-language': 'ko' },
+      });
+
+      const answers = await handle(interaction);
+
+      expect(answers[1]?.content).toBe('✅ Now translating in **General** between **Japanese (日本語)** and **Korean (한국어)**');
+      expect(sessions.find(GuildId.of('1'))?.languages.toString()).toBe('ja,ko');
+    });
+
+    it('refuses one language twice, and neither joins nor tells the channel', async () => {
+      const interaction = new FakeInteraction('translate-join', {
+        voiceChannel: GENERAL,
+        strings: { language: 'ko', 'second-language': 'ko' },
+      });
+
+      const answers = await handle(interaction);
+
+      expect(answers[1]).toEqual({ via: 'editReply', content: '❌ Choose two different languages' });
+      expect(voice.joins).toEqual([]);
+      expect(interaction.notices).toEqual([]);
+    });
+
+    it('keeps translating, and logs it, when the notice cannot be posted', async () => {
+      const interaction = new FakeInteraction('translate-join', { voiceChannel: GENERAL });
+      interaction.noticeError = new Error('Missing Permissions');
+
+      const answers = await handle(interaction);
+
+      expect(answers[1]?.content).toBe('✅ Now translating in **General** to **Japanese (日本語)**');
+      expect(sessions.find(GuildId.of('1'))).toBeDefined();
+      expect(logger.messages('error')).toEqual(['Failed to post the notice that translation started']);
     });
 
     it('translates into the default language when none is chosen', async () => {
@@ -168,6 +225,27 @@ describe('CommandHandler', () => {
 
       expect(answers).toEqual([{ via: 'reply', content: '🔄 Target language changed to **Korean (한국어)**', flags: EPHEMERAL }]);
       expect(sessions.find(GuildId.of('1'))?.targetLanguage.tag).toBe('ko');
+    });
+
+    it('changes to a pair of languages and says so', async () => {
+      sessions.save(aSession({ language: 'en' }));
+
+      const answers = await handle(
+        new FakeInteraction('translate-language', { strings: { language: 'ja', 'second-language': 'ko' } })
+      );
+
+      expect(answers[0]?.content).toBe('🔄 Now translating between **Japanese (日本語)** and **Korean (한국어)**');
+      expect(sessions.find(GuildId.of('1'))?.languages.toString()).toBe('ja,ko');
+    });
+
+    it('refuses one language twice', async () => {
+      sessions.save(aSession({ language: 'en' }));
+
+      const answers = await handle(
+        new FakeInteraction('translate-language', { strings: { language: 'ko', 'second-language': 'ko' } })
+      );
+
+      expect(answers[0]?.content).toBe('❌ Choose two different languages');
     });
 
     it('says to join first', async () => {
