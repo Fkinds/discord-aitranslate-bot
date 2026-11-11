@@ -35,7 +35,7 @@ if (unclassified.length > 0) {
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
   verbose: true,
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/index.ts', '!src/deploy-commands.ts'],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/deploy-commands.ts'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   projects: Object.entries(SIZES).map(([size, { network }]) => ({
