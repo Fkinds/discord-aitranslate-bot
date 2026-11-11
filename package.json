@@ -1,7 +1,7 @@
 {
   "name": "discord-multilingual-translator",
   "version": "1.0.0",
-  "description": "AI-powered Discord bot for real-time multilingual voice translation supporting 60+ languages with Google Gemini, OpenAI, and DeepL",
+  "description": "Discord bot that translates voice chat in real time with Google Gemini, into one language or between a pair of languages",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
@@ -26,8 +26,6 @@
     "voice-translation",
     "ai-translation",
     "gemini",
-    "openai",
-    "deepl",
     "speech-to-text",
     "language-detection",
     "i18n",
@@ -41,8 +39,7 @@
     "chinese",
     "spanish",
     "french",
-    "german",
-    "60-languages"
+    "german"
   ],
   "author": "Fkinds",
   "contributors": [
