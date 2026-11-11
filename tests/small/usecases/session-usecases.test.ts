@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { GuildId } from '../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../src/domain/language-code';
-import { ChangeTargetLanguage } from '../../../src/usecases/change-target-language';
+import { ChangeLanguages } from '../../../src/usecases/change-languages';
 import { GetTranslationStatus } from '../../../src/usecases/get-translation-status';
 import { SessionStore } from '../../../src/usecases/session-store';
 import { StopTranslation } from '../../../src/usecases/stop-translation';
@@ -53,23 +53,23 @@ describe('session use cases', () => {
     });
   });
 
-  describe('ChangeTargetLanguage', () => {
+  describe('ChangeLanguages', () => {
     it("changes the running session's language", () => {
       sessions.save(aSession({ language: 'ja' }));
 
-      const result = new ChangeTargetLanguage(sessions).execute({
+      const result = new ChangeLanguages(sessions).execute({
         guildId: GUILD,
         language: LanguageCode.of('ko'),
       });
 
       expect(result.kind).toBe('changed');
-      expect(sessions.find(GUILD)?.targetLanguage.tag).toBe('ko');
+      expect(sessions.find(GUILD)?.languages.toString()).toBe('ko');
     });
 
     it('changes to a pair of languages', () => {
       sessions.save(aSession({ language: 'ja' }));
 
-      const result = new ChangeTargetLanguage(sessions).execute({
+      const result = new ChangeLanguages(sessions).execute({
         guildId: GUILD,
         language: LanguageCode.of('ja'),
         secondLanguage: LanguageCode.of('ko'),
@@ -82,7 +82,7 @@ describe('session use cases', () => {
     it('refuses one language twice, and keeps the languages as they were', () => {
       sessions.save(aSession({ language: 'en' }));
 
-      const result = new ChangeTargetLanguage(sessions).execute({
+      const result = new ChangeLanguages(sessions).execute({
         guildId: GUILD,
         language: LanguageCode.of('ko'),
         secondLanguage: LanguageCode.of('ko'),
@@ -93,7 +93,7 @@ describe('session use cases', () => {
     });
 
     it('does nothing when no session is running', () => {
-      const result = new ChangeTargetLanguage(sessions).execute({
+      const result = new ChangeLanguages(sessions).execute({
         guildId: GUILD,
         language: LanguageCode.of('ko'),
       });
@@ -126,7 +126,7 @@ describe('session use cases', () => {
       sessions.save(aSession({ language: 'ja' }));
       sessions.save(aSession({ language: 'en' }));
 
-      expect(sessions.find(GUILD)?.targetLanguage.tag).toBe('en');
+      expect(sessions.find(GUILD)?.languages.toString()).toBe('en');
     });
 
     it('keeps the sessions of different servers apart', () => {
