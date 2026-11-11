@@ -66,6 +66,32 @@ describe('session use cases', () => {
       expect(sessions.find(GUILD)?.targetLanguage.tag).toBe('ko');
     });
 
+    it('changes to a pair of languages', () => {
+      sessions.save(aSession({ language: 'ja' }));
+
+      const result = new ChangeTargetLanguage(sessions).execute({
+        guildId: GUILD,
+        language: LanguageCode.of('ja'),
+        secondLanguage: LanguageCode.of('ko'),
+      });
+
+      expect(result.kind).toBe('changed');
+      expect(sessions.find(GUILD)?.languages.toString()).toBe('ja,ko');
+    });
+
+    it('refuses one language twice, and keeps the languages as they were', () => {
+      sessions.save(aSession({ language: 'en' }));
+
+      const result = new ChangeTargetLanguage(sessions).execute({
+        guildId: GUILD,
+        language: LanguageCode.of('ko'),
+        secondLanguage: LanguageCode.of('ko'),
+      });
+
+      expect(result).toEqual({ kind: 'sameLanguageTwice' });
+      expect(sessions.find(GUILD)?.languages.toString()).toBe('en');
+    });
+
     it('does nothing when no session is running', () => {
       const result = new ChangeTargetLanguage(sessions).execute({
         guildId: GUILD,

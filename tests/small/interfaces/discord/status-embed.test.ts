@@ -17,6 +17,12 @@ describe('formatUptime', () => {
 });
 
 describe('statusEmbed', () => {
+  it('shows a pair of languages joined by ⇄', () => {
+    const embed = statusEmbed(aSession({ language: 'ja', second: 'ko' }), 0, STARTED_AT).toJSON();
+
+    expect(embed.fields?.find((field) => field.name === 'Target Language')?.value).toBe('Japanese (日本語) ⇄ Korean (한국어)');
+  });
+
   it('shows the language, the uptime, how many are speaking and the channels', () => {
     const session = aSession({ language: 'ko', voice: '10', text: '20' }).speakerStarted(UserId.of('30'));
 

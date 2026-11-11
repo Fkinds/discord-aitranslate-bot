@@ -3,7 +3,7 @@ import { Client, Events, MessageFlags } from 'discord.js';
 import { readConfig } from '../../src/infrastructure/config';
 import { GeminiTranslator } from '../../src/infrastructure/gemini/gemini-translator';
 import { PlaceholderTranslator } from '../../src/infrastructure/placeholder-translator';
-import { compose, translatorFor } from '../../src/main';
+import { compose, startNoticeFor, translatorFor } from '../../src/main';
 import { FakeLogger } from '../support/fakes/fake-logger';
 
 const config = readConfig({ DISCORD_BOT_TOKEN: 'token', DISCORD_CLIENT_ID: '123', TRANSLATOR: 'fake' });
@@ -17,6 +17,16 @@ describe('translatorFor', () => {
 
   it('stands in a placeholder with TRANSLATOR=fake', () => {
     expect(translatorFor({ kind: 'fake' }, new FakeLogger())).toBeInstanceOf(PlaceholderTranslator);
+  });
+});
+
+describe('startNoticeFor', () => {
+  it('says that what is said goes to Google Gemini', () => {
+    expect(startNoticeFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' })).toContain('sent to Google Gemini');
+  });
+
+  it('says that nothing is sent anywhere with TRANSLATOR=fake', () => {
+    expect(startNoticeFor({ kind: 'fake' })).toBe('What is said there is not sent anywhere (TRANSLATOR=fake).');
   });
 });
 

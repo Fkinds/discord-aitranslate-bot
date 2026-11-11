@@ -40,6 +40,16 @@ export function translatorFor(config: TranslatorConfig, logger: Logger): Transla
   }
 }
 
+/** What the notice that translation started says about where what is said goes. */
+export function startNoticeFor(config: TranslatorConfig): string {
+  switch (config.kind) {
+    case 'gemini':
+      return 'What is said there is sent to Google Gemini to be translated.';
+    case 'fake':
+      return 'What is said there is not sent anywhere (TRANSLATOR=fake).';
+  }
+}
+
 /** Build the bot's parts, and wire them to each other and to the Discord client. */
 export function compose(config: Config, client: Client, logger: Logger, clock: Clock = () => new Date()): void {
   const sessions = new SessionStore();
@@ -59,13 +69,14 @@ export function compose(config: Config, client: Client, logger: Logger, clock: C
   const voice = new DiscordVoice(client, voiceEvents, logger);
   const commands = new CommandHandler(
     {
-      startTranslation: new StartTranslation(sessions, voice, clock, config.defaultTargetLanguage),
+      startTranslation: new StartTranslation(sessions, voice, clock, config.defaultLanguages),
       stopTranslation: new StopTranslation(sessions, voice),
       changeTargetLanguage: new ChangeTargetLanguage(sessions),
       getTranslationStatus: new GetTranslationStatus(sessions, clock),
     },
     clock,
-    logger
+    logger,
+    startNoticeFor(config.translator)
   );
 
   client.once(Events.ClientReady, (ready) => {

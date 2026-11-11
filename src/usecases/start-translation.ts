@@ -1,5 +1,6 @@
 import type { ChannelId, GuildId } from '../domain/discord-ids';
 import type { LanguageCode } from '../domain/language-code';
+import { TranslationLanguages } from '../domain/translation-languages';
 import { TranslationSession } from '../domain/translation-session';
 import type { Clock } from './ports/clock';
 import type { VoiceConnector } from './ports/voice-connector';
@@ -11,13 +12,20 @@ export interface StartTranslationCommand {
   readonly requesterVoiceChannelId: ChannelId | null;
   /** Where the translations are posted: the channel the command came from. */
   readonly textChannelId: ChannelId;
-  /** The language to translate into; the default language if omitted. */
-  readonly targetLanguage?: LanguageCode;
+  /**
+   * The language to translate into, or the first of a pair. With neither this
+   * nor the second language, the default languages; with only the second,
+   * the default first language and the second.
+   */
+  readonly language?: LanguageCode;
+  /** The other language of a pair. */
+  readonly secondLanguage?: LanguageCode;
 }
 
 export type StartTranslationResult =
   | { readonly kind: 'started'; readonly session: TranslationSession }
   | { readonly kind: 'requesterNotInVoiceChannel' }
+  | { readonly kind: 'sameLanguageTwice' }
   | { readonly kind: 'alreadyRunning'; readonly session: TranslationSession };
 
 /** Join the requester's voice channel and start translating what is said there. */
@@ -26,12 +34,15 @@ export class StartTranslation {
     private readonly sessions: SessionStore,
     private readonly voice: VoiceConnector,
     private readonly clock: Clock,
-    private readonly defaultLanguage: LanguageCode
+    private readonly defaultLanguages: TranslationLanguages
   ) {}
 
   /** @throws VoiceConnectionFailed when joining fails; no session is left behind. */
   async execute(command: StartTranslationCommand): Promise<StartTranslationResult> {
-    // Checked in the order the bot has always checked them.
+    // Checked in the order the bot has always checked them, after the
+    // languages, which it did not have to check.
+    const languages = this.languagesFor(command);
+    if (!languages) return { kind: 'sameLanguageTwice' };
     if (!command.requesterVoiceChannelId) return { kind: 'requesterNotInVoiceChannel' };
     const running = this.sessions.find(command.guildId);
     if (running) return { kind: 'alreadyRunning', session: running };
@@ -40,7 +51,7 @@ export class StartTranslation {
       guildId: command.guildId,
       voiceChannelId: command.requesterVoiceChannelId,
       textChannelId: command.textChannelId,
-      targetLanguage: command.targetLanguage ?? this.defaultLanguage,
+      languages,
       startedAt: this.clock(),
     });
     // Saved before joining, so that a second request while connecting finds it.
@@ -52,5 +63,12 @@ export class StartTranslation {
       throw error;
     }
     return { kind: 'started', session };
+  }
+
+  /** The languages asked for, or undefined when the second is the first again. */
+  private languagesFor({ language, secondLanguage }: StartTranslationCommand): TranslationLanguages | undefined {
+    if (!language && !secondLanguage) return this.defaultLanguages;
+    const first = language ?? this.defaultLanguages.first;
+    return secondLanguage?.equals(first) ? undefined : TranslationLanguages.of(first, secondLanguage);
   }
 }
