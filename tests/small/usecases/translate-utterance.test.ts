@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from '@jest/globals';
 import { GuildId, UserId } from '../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../src/domain/language-code';
 import { SpeechAudio } from '../../../src/usecases/ports/speech-audio';
-import { PublishFailed } from '../../../src/usecases/ports/translation-publisher';
+import { PublishFailed, type TranslationPost } from '../../../src/usecases/ports/translation-publisher';
 import { TranslationFailed } from '../../../src/usecases/ports/translator';
 import { SessionStore } from '../../../src/usecases/session-store';
 import { TranslateUtterance } from '../../../src/usecases/translate-utterance';
@@ -15,6 +15,8 @@ const GUILD = GuildId.of('1');
 const SPEAKER = UserId.of('30');
 const SPEECH = SpeechAudio.fromPcm(new Uint8Array(3200));
 const SILENCE = SpeechAudio.fromPcm(new Uint8Array(0));
+/** The translations of a post, as [tag, text]. */
+const posted = (post: TranslationPost | undefined) => post?.translations.map(({ language, text }) => [language.tag, text]);
 
 describe('TranslateUtterance', () => {
   let sessions: SessionStore;
@@ -41,14 +43,14 @@ describe('TranslateUtterance', () => {
     const result = await translateUtterance.execute(utterance());
 
     expect(translator.requests).toEqual([{ bytes: 3200, languages: 'ko' }]);
-    const translation = { original: '3200 bytes of speech', translated: 'translated into ko', detectedLanguage: 'other' };
-    expect(result).toEqual({ kind: 'posted', translation });
+    expect(result).toMatchObject({ kind: 'posted', translation: { original: '3200 bytes of speech', spokenLanguage: null } });
     expect(publisher.posts).toHaveLength(1);
     const [post] = publisher.posts;
     expect(post?.guildId.value).toBe('1');
     expect(post?.textChannelId.value).toBe('20');
     expect(post?.speakerId.value).toBe('30');
-    expect(post?.translation).toEqual(translation);
+    expect(post?.original).toBe('3200 bytes of speech');
+    expect(posted(post)).toEqual([['ko', 'translated into ko']]);
   });
 
   it('translates into the language set when the speaker started, as the bot always has', async () => {
@@ -77,16 +79,18 @@ describe('TranslateUtterance', () => {
   });
 
   it.each([
-    ['one language of a pair', 'ja', 'translated into ko'],
-    ['the other language of a pair', 'ko', 'translated into ja'],
-  ])('posts the translation into the other language when %s is spoken', async (_, spoken, posted) => {
+    ['one language of a pair', 'ja', [['ko', 'translated into ko']]],
+    ['the other language of a pair', 'ko', [['ja', 'translated into ja']]],
+    ['neither language of a pair', null, [['ja', 'translated into ja'], ['ko', 'translated into ko']]],
+  ])('posts what was said with its translation into the right languages when %s is spoken', async (_, spoken, expected) => {
     sessions.save(aSession({ language: 'ja', second: 'ko' }));
-    translator.hears(LanguageCode.of(spoken));
+    translator.hears(spoken ? LanguageCode.of(spoken) : null);
 
     await translateUtterance.execute(utterance());
 
     expect(translator.requests).toEqual([{ bytes: 3200, languages: 'ja,ko' }]);
-    expect(publisher.posts[0]?.translation).toMatchObject({ translated: posted, detectedLanguage: spoken });
+    expect(publisher.posts[0]?.original).toBe('3200 bytes of speech');
+    expect(posted(publisher.posts[0])).toEqual(expected);
   });
 
   it("posts only what was said when it was said in the session's one language", async () => {
@@ -95,7 +99,8 @@ describe('TranslateUtterance', () => {
 
     await translateUtterance.execute(utterance());
 
-    expect(publisher.posts[0]?.translation).toMatchObject({ original: '3200 bytes of speech', translated: '3200 bytes of speech' });
+    expect(publisher.posts[0]?.original).toBe('3200 bytes of speech');
+    expect(posted(publisher.posts[0])).toEqual([]);
   });
 
   it('posts nothing when the speech had no words in it', async () => {

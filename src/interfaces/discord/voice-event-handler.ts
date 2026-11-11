@@ -49,7 +49,10 @@ export class VoiceEventHandler {
       const result = await this.useCases.translateUtterance.execute({ guildId, speakerId: userId, audio: speech });
       switch (result.kind) {
         case 'posted':
-          this.logger.info('Translation posted', { ...ids, detectedLanguage: result.translation.detectedLanguage });
+          this.logger.info('Translation posted', {
+            ...ids,
+            spokenLanguage: result.translation.spokenLanguage?.tag ?? 'other',
+          });
           return;
         case 'nothingHeard':
           this.logger.debug('Nothing heard in the utterance', ids);
