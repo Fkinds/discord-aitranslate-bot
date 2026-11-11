@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":semanticCommits"],
+  "automergeStrategy": "rebase",
+  "packageRules": [
+    {
+      "description": "Merge minor and patch updates of packages at 1.0 or later once the ci check passes. Major updates, and updates of packages at 0.x, where a minor update may break things, wait for a person.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true
+    },
+    {
+      "description": "Merge updates of the GitHub Actions, which are pinned by digest, once the ci check passes.",
+      "matchManagers": ["github-actions"],
+      "automerge": true
+    }
+  ]
+}
