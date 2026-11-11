@@ -29,7 +29,11 @@ describe('GeminiTranslator over HTTP', () => {
 
   beforeEach(async () => {
     gemini = await HttpStub.start();
-    translator = new GeminiTranslator(geminiModel('test-key', 'gemini-test', gemini.url), { attempts: 3, delayMs: 0 }, new FakeLogger());
+    translator = new GeminiTranslator(
+      geminiModel('test-key', 'gemini-test', { baseUrl: gemini.url, timeoutMs: 200 }),
+      { attempts: 3, initialDelayMs: 0, maxAdvisedDelayMs: 5000 },
+      new FakeLogger()
+    );
   });
 
   afterEach(async () => {
@@ -65,23 +69,41 @@ describe('GeminiTranslator over HTTP', () => {
     expect(gemini.requests).toHaveLength(2);
   });
 
-  it('tries a refused request again too, as the bot always has, then gives up', async () => {
-    gemini.respond(failure(400, 'INVALID_ARGUMENT'), failure(400, 'INVALID_ARGUMENT'), failure(400, 'INVALID_ARGUMENT'));
+  it('gives up at once on a refused request', async () => {
+    gemini.respond(failure(400, 'INVALID_ARGUMENT'), answer(REPLY));
 
     const error = await translator.translate(SPEECH, JA).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(TranslationFailed);
     expect(String((error as TranslationFailed).cause)).toContain('400');
-    expect(gemini.requests).toHaveLength(3);
+    expect(gemini.requests).toHaveLength(1);
   });
 
-  it('takes a blocked answer, which has no text, as a failure', async () => {
-    const blocked: StubResponse = { status: 200, body: { promptFeedback: { blockReason: 'SAFETY' } } };
-    gemini.respond(blocked, blocked, blocked);
+  it('gives up at once on a blocked answer, which has no text', async () => {
+    gemini.respond({ status: 200, body: { promptFeedback: { blockReason: 'SAFETY' } } }, answer(REPLY));
 
     const error = await translator.translate(SPEECH, JA).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(TranslationFailed);
     expect(String((error as TranslationFailed).cause)).toContain('SAFETY');
+    expect(gemini.requests).toHaveLength(1);
+  });
+
+  it('gives up at once when a 429 asks to wait longer than 5 s', async () => {
+    const retryInfo = { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '30s' };
+    gemini.respond(
+      { status: 429, body: { error: { code: 429, message: 'quota', status: 'RESOURCE_EXHAUSTED', details: [retryInfo] } } },
+      answer(REPLY)
+    );
+
+    await expect(translator.translate(SPEECH, JA)).rejects.toThrow('asked to wait 30000 ms');
+    expect(gemini.requests).toHaveLength(1);
+  });
+
+  it('abandons a request that takes too long, and tries again', async () => {
+    gemini.respond({ ...answer(REPLY), delayMs: 1000 }, answer(REPLY));
+
+    await expect(translator.translate(SPEECH, JA)).resolves.toMatchObject({ translated: 'こんにちは' });
+    expect(gemini.requests).toHaveLength(2);
   });
 });

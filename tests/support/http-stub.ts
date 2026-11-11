@@ -13,6 +13,8 @@ export interface StubResponse {
   readonly status: number;
   /** Sent as JSON. */
   readonly body: unknown;
+  /** How long to hold the response back. */
+  readonly delayMs?: number;
 }
 
 /**
@@ -58,8 +60,13 @@ export class HttpStub {
         body: Buffer.concat(chunks).toString('utf8'),
       });
       const response = this.responses.shift() ?? { status: 500, body: { error: 'HttpStub has no response left' } };
-      res.writeHead(response.status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(response.body));
+      const send = () => {
+        if (res.destroyed) return;
+        res.writeHead(response.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(response.body));
+      };
+      if (response.delayMs) setTimeout(send, response.delayMs).unref();
+      else send();
     });
   }
 }

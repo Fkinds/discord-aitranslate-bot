@@ -22,11 +22,19 @@ import { StartTranslation } from './usecases/start-translation';
 import { StopTranslation } from './usecases/stop-translation';
 import { TranslateUtterance } from './usecases/translate-utterance';
 
-/** The translator the settings ask for. Gemini is tried 3 times, 1 s apart, as it always has been. */
+/**
+ * The translator the settings ask for. Each Gemini request may take 15 s; a
+ * transient failure is tried again up to 3 attempts in all, 1 s and then 2 s
+ * apart, or after the wait Gemini asks for when that is at most 5 s.
+ */
 export function translatorFor(config: TranslatorConfig, logger: Logger): Translator {
   switch (config.kind) {
     case 'gemini':
-      return new GeminiTranslator(geminiModel(config.apiKey, config.model), { attempts: 3, delayMs: 1000 }, logger);
+      return new GeminiTranslator(
+        geminiModel(config.apiKey, config.model, { timeoutMs: 15_000 }),
+        { attempts: 3, initialDelayMs: 1000, maxAdvisedDelayMs: 5000 },
+        logger
+      );
     case 'fake':
       return new PlaceholderTranslator();
   }
