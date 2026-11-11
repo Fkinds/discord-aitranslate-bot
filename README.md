@@ -303,6 +303,10 @@ Tests are sorted by what they depend on, not by how long they take:
 
 The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the small and medium tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. The large tests run in their own workflow (`.github/workflows/large-tests.yml`), with the API key of the `large-tests` environment, which only `main` may use.
 
+### Dependency Updates
+
+[Renovate](https://docs.renovatebot.com/) keeps the dependencies up to date (`renovate.json`). It waits 3 days after an npm release before proposing it. Minor and patch updates of packages at 1.0 or later, and updates of the GitHub Actions, are merged once the `ci` check passes. Major updates, updates of packages at 0.x, pinning and the weekly lock file maintenance wait for a person.
+
 ### Git Hooks
 
 `pnpm install` installs Git hooks with [prek](https://github.com/j178/prek) (`prek.toml`). Before each commit they check:
