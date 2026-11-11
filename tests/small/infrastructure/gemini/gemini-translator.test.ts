@@ -145,15 +145,15 @@ describe('GeminiTranslator', () => {
 
 describe('geminiModel', () => {
   it('needs an API key', () => {
-    expect(() => geminiModel('   ', 'gemini-2.0-flash-exp', { timeoutMs: 15_000 })).toThrow('Gemini API key is required');
+    expect(() => geminiModel('   ', 'gemini-3.8-flash', { timeoutMs: 15_000 })).toThrow('Gemini API key is required');
   });
 
   it.each([0, -1, 1.5])('needs a positive timeout, not %s', (timeoutMs) => {
-    expect(() => geminiModel('test-key', 'gemini-2.0-flash-exp', { timeoutMs })).toThrow(RangeError);
+    expect(() => geminiModel('test-key', 'gemini-3.8-flash', { timeoutMs })).toThrow(RangeError);
   });
 
   it('makes a model without connecting', () => {
-    expect(typeof geminiModel('test-key', 'gemini-2.0-flash-exp', { timeoutMs: 15_000 }).generateText).toBe('function');
+    expect(typeof geminiModel('test-key', 'gemini-3.8-flash', { timeoutMs: 15_000 }).generateText).toBe('function');
   });
 });
 

@@ -24,6 +24,12 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * The Gemini model when GEMINI_MODEL is unset: the newest stable Flash model
+ * that takes audio, as of 2026-11.
+ */
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+
 type Env = Readonly<Record<string, string | undefined>>;
 
 /**
@@ -52,7 +58,7 @@ export function readConfig(env: Env): Config {
     discordClientId: value('DISCORD_CLIENT_ID')!,
     translator:
       translatorKind === 'gemini'
-        ? { kind: 'gemini', apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? 'gemini-2.0-flash-exp' }
+        ? { kind: 'gemini', apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL }
         : { kind: 'fake' },
     defaultTargetLanguage: languageFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja'),
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),

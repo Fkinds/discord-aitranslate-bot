@@ -10,7 +10,7 @@ const config = readConfig({ DISCORD_BOT_TOKEN: 'token', DISCORD_CLIENT_ID: '123'
 
 describe('translatorFor', () => {
   it('translates with Gemini by default', () => {
-    expect(translatorFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-2.0-flash-exp' }, new FakeLogger())).toBeInstanceOf(
+    expect(translatorFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' }, new FakeLogger())).toBeInstanceOf(
       GeminiTranslator
     );
   });

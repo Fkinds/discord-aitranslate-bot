@@ -24,10 +24,10 @@ describe('readConfig', () => {
     expect(config.logLevel).toBe('debug');
   });
 
-  it('falls back to the defaults the bot has always had', () => {
+  it('falls back to the defaults', () => {
     const config = readConfig(REQUIRED);
 
-    expect(config.translator).toEqual({ kind: 'gemini', apiKey: 'key', model: 'gemini-2.0-flash-exp' });
+    expect(config.translator).toEqual({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' });
     expect(config.defaultTargetLanguage.tag).toBe('ja');
     expect(config.logLevel).toBe('info');
   });
@@ -35,7 +35,7 @@ describe('readConfig', () => {
   it('takes an empty variable as unset, as it always has', () => {
     const config = readConfig({ ...REQUIRED, TRANSLATOR: '', GEMINI_MODEL: '', DEFAULT_TARGET_LANGUAGE: '', LOG_LEVEL: '' });
 
-    expect(config.translator).toMatchObject({ kind: 'gemini', model: 'gemini-2.0-flash-exp' });
+    expect(config.translator).toMatchObject({ kind: 'gemini', model: 'gemini-3.8-flash' });
     expect(config.defaultTargetLanguage.tag).toBe('ja');
     expect(() => readConfig({ ...REQUIRED, DISCORD_BOT_TOKEN: '' })).toThrow('DISCORD_BOT_TOKEN');
   });
