@@ -4,11 +4,11 @@
 
 # Force stop all existing bot processes to prevent duplicates
 echo "Checking for existing bot processes..."
-EXISTING_PIDS=$(pgrep -f "node.*dist/index.js" || true)
+EXISTING_PIDS=$(pgrep -f "node.*dist/main.js" || true)
 if [ ! -z "$EXISTING_PIDS" ]; then
     echo "Found existing bot processes, stopping them..."
-    pkill -9 -f "node.*dist/index.js" || true
-    pkill -9 -f "sh -c node.*dist/index.js" || true
+    pkill -9 -f "node.*dist/main.js" || true
+    pkill -9 -f "sh -c node.*dist/main.js" || true
     sleep 1
     echo "All existing processes stopped"
 fi
