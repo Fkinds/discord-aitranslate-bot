@@ -346,7 +346,7 @@ The test environment holds tests to this: a small test that opens a connection, 
 
 ### Dependency Updates
 
-[Renovate](https://docs.renovatebot.com/) keeps the dependencies up to date (`renovate.json`). It waits 3 days after an npm release before proposing it. Minor and patch updates of packages at 1.0 or later, and updates of the GitHub Actions, are merged once the `ci` check passes. Major updates, updates of packages at 0.x, pinning and the weekly lock file maintenance wait for a person. The local models are not updated by Renovate: their versions are fixed in `src/infrastructure/local/model-files.ts`.
+[Renovate](https://docs.renovatebot.com/) keeps the dependencies up to date (`renovate.json`). It waits 3 days after an npm release before proposing it. Minor and patch updates of packages at 1.0 or later, and updates of the GitHub Actions, are merged once the `ci` check passes. Major updates, updates of packages at 0.x, pinning and the weekly lock file maintenance wait for a person. `@types/node` stays at 22.x, the oldest Node.js release line the bot supports, and TypeScript below 7, until the test tools support it. The local models are not updated by Renovate: their versions are fixed in `src/infrastructure/local/model-files.ts`.
 
 ### Git Hooks
 
