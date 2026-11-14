@@ -23,6 +23,8 @@ on:
       - "src/domain/translation-languages.ts"
       - "src/main.ts"
       - "tests/large/**"
+      - "tests/fixtures/**"
+      - "tests/support/recording.ts"
       - "package.json"
       - "pnpm-lock.yaml"
       - ".github/workflows/large-tests.yml"
