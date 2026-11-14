@@ -39,6 +39,10 @@ async function answer(session, { id, prompt, maxTokens }) {
   try {
     // Each prompt on its own, with no system prompt, as the model card asks.
     session.setChatHistory([]);
+    // Evaluated from the start every time: reusing what an earlier prompt left
+    // in the context changes how the tokens are batched, and on the CPU that
+    // can change which token is likeliest, and so the translation.
+    await session.sequence.clearHistory();
     const { responseText, stopReason } = await session.promptWithMeta(prompt, {
       maxTokens,
       // Always the likeliest token, so that the same text gets the same
