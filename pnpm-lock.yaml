@@ -185,8 +185,8 @@ importers:
         specifier: ^16.4.5
         version: 16.6.1
       libsodium-wrappers:
-        specifier: ^0.7.15
-        version: 0.7.16
+        specifier: ^0.8.0
+        version: 0.8.4
       node-llama-cpp:
         specifier: 3.22.3
         version: 3.22.3(supports-color@8.1.1)(typescript@5.9.3)
@@ -216,8 +216,8 @@ importers:
         specifier: 29.5.14
         version: 29.5.14
       '@types/libsodium-wrappers':
-        specifier: 0.7.14
-        version: 0.7.14
+        specifier: 0.8.2
+        version: 0.8.2
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
@@ -1055,8 +1055,9 @@ packages:
   '@types/jest@29.5.14':
     resolution: {integrity: sha512-ZN+4sdnLUbo8EVvVc2ao0GFW6oVrQRPn4K2lglySj7APvSrgzxHiNNK99us4WDMi57xxA2yggblIAMNhXOotLQ==}
 
-  '@types/libsodium-wrappers@0.7.14':
-    resolution: {integrity: sha512-5Kv68fXuXK0iDuUir1WPGw2R9fOZUlYlSAa0ztMcL0s0BfIDTqg9GXz8K30VJpPP3sxWhbolnQma2x+/TfkzDQ==}
+  '@types/libsodium-wrappers@0.8.2':
+    resolution: {integrity: sha512-+2IDfSULPUskSjIYfZl9suIUsIE5PXwoKZiE/j0MZWd+M9nEGvJDsk/ztMZKNhL1lBL+1CaypW0dQSjqPW2dMg==}
+    deprecated: This is a stub types definition. libsodium-wrappers provides its own type definitions, so you do not need this installed.
 
   '@types/node@22.20.5':
     resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
@@ -2067,11 +2068,11 @@ packages:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
 
-  libsodium-wrappers@0.7.16:
-    resolution: {integrity: sha512-Gtr/WBx4dKjvRL1pvfwZqu7gO6AfrQ0u9vFL+kXihtHf6NfkROR8pjYWn98MFDI3jN19Ii1ZUfPR9afGiPyfHg==}
+  libsodium-wrappers@0.8.4:
+    resolution: {integrity: sha512-mu8aAWucZjTB5O/BtGXtW4e1agy7uHxNYG7zPthmmD1jU43LCDmSWZLN4JhflbdPXj3yDO4lxM1O9hLDgIOXDw==}
 
-  libsodium@0.7.16:
-    resolution: {integrity: sha512-3HrzSPuzm6Yt9aTYCDxYEG8x8/6C0+ag655Y7rhhWZM9PT4NpdnbqlzXhGZlDnkgR6MeSTnOt/VIyHLs9aSf+Q==}
+  libsodium@0.8.4:
+    resolution: {integrity: sha512-lMcYaRi0zcs7tarATsQUYC7rstliIXZuoq0c6zXSgNtSNtdvBgkSegjWhpMJAXzKX3SUSwIp7+zEsob+j3LuRw==}
 
   lifecycle-utils@2.1.0:
     resolution: {integrity: sha512-AnrXnE2/OF9PHCyFg0RSqsnQTzV991XaZA/buhFDoc58xU7rhSCDgCz/09Lqpsn4MpoPHt7TRAXV1kWZypFVsA==}
@@ -3865,7 +3866,9 @@ snapshots:
       expect: 29.7.0
       pretty-format: 29.7.0
 
-  '@types/libsodium-wrappers@0.7.14': {}
+  '@types/libsodium-wrappers@0.8.2':
+    dependencies:
+      libsodium-wrappers: 0.8.4
 
   '@types/node@22.20.5':
     dependencies:
@@ -5047,11 +5050,11 @@ snapshots:
 
   leven@3.1.0: {}
 
-  libsodium-wrappers@0.7.16:
+  libsodium-wrappers@0.8.4:
     dependencies:
-      libsodium: 0.7.16
+      libsodium: 0.8.4
 
-  libsodium@0.7.16: {}
+  libsodium@0.8.4: {}
 
   lifecycle-utils@2.1.0: {}
 
