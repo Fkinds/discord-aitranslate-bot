@@ -12,7 +12,7 @@
     "models:download": "ts-node src/download-models.ts",
     "test": "jest --selectProjects small",
     "test:small": "jest --selectProjects small",
-    "test:medium": "jest --selectProjects medium",
+    "test:medium": "jest --selectProjects medium --runInBand",
     "test:large": "jest --selectProjects large",
     "test:watch": "jest --watch --selectProjects small",
     "test:coverage": "jest --coverage --selectProjects small medium",
