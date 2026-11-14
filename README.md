@@ -59,7 +59,7 @@ The local translator (the default) translates into these 10 only. With `TRANSLAT
 - Node.js 22.12 or later, which `@discordjs/voice` requires. CI runs on Node 22, 24 and 26.
 - pnpm 12. The exact version is pinned in `package.json` (`packageManager`).
 - A Discord application with a bot
-- For the local translator (the default): 2.2 GB of disk for the models, and about 4.5 GB of free memory while the bot runs (4.2 GB at most, measured on a Mac). On a Mac with Apple silicon, the translation model runs on the GPU; elsewhere both models run on the CPU. It is tried on macOS with Apple silicon, and in CI on Linux x64.
+- For the local translator (the default): 2.2 GB of disk for the models, and about 4.5 GB of free memory while the bot runs (measured on a Mac: 3.5 GB at most for the bot, and 1 GB for the translation model's process). On a Mac with Apple silicon, the translation model runs on the GPU; elsewhere both models run on the CPU. It is tried on macOS with Apple silicon, and in CI on Linux x64.
 - A Google Gemini API key, only with `TRANSLATOR=gemini`
 
 ## Installation
@@ -277,7 +277,7 @@ The bot works on one utterance at a time, in the order they came; one that waite
 | [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo), int8 for [sherpa-onnx](https://huggingface.co/csukuangfj/sherpa-onnx-whisper-turbo) | Transcribes, and tells the language | MIT | 1.0 GB |
 | [Hy-MT2-1.8B](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF), Q4_K_M | Translates | Apache-2.0 | 1.1 GB |
 
-[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) runs Silero VAD and Whisper on the CPU. [node-llama-cpp](https://github.com/withcatai/node-llama-cpp) runs Hy-MT2 on the Mac's GPU, or on the CPU elsewhere, in a worker thread of its own.
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) runs Silero VAD and Whisper on the CPU. [node-llama-cpp](https://github.com/withcatai/node-llama-cpp) runs Hy-MT2 on the Mac's GPU, or on the CPU elsewhere, in a process of its own: in the same process as onnxruntime, it wrote garbage now and then on some Intel Xeon CPUs.
 
 ### When the Local Translator Fails
 

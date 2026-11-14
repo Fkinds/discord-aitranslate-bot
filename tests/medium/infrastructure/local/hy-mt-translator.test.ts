@@ -27,7 +27,7 @@ const WRITTEN_IN: Readonly<Record<string, RegExp>> = {
   ru: /\p{Script=Cyrillic}/u,
 };
 
-// Hy-MT2-1.8B from the model pnpm models:download puts in models/, run by node-llama-cpp in a worker thread.
+// Hy-MT2-1.8B from the model pnpm models:download puts in models/, run by node-llama-cpp in a process of its own.
 describe('HyMtTranslator, with the local model', () => {
   let translator: HyMtTranslator;
 
