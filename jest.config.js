@@ -8,8 +8,6 @@ const path = require('node:path');
 //           Real libraries are fine as long as they do no I/O.
 //   medium  this machine only: servers on localhost, and the local models that
 //           pnpm models:download puts in models/. No other host.
-//   large   real outside services, such as the Gemini API. Not run on pull
-//           requests (.github/workflows/large-tests.yml).
 //
 // The medium tests run one file at a time (--runInBand in package.json): the
 // local models use every CPU core they find, and llama.cpp slows to a crawl
@@ -20,7 +18,6 @@ const path = require('node:path');
 const SIZES = {
   small: { network: 'none' },
   medium: { network: 'loopback' },
-  large: { network: 'any' },
 };
 
 // Refuse to run while any test file sits outside tests/<size>/, so that no

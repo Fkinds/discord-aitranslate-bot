@@ -44,16 +44,6 @@ environments:
     deployment_branch_policies:
       - name: main
         type: branch
-  - name: large-tests # holds GOOGLE_GEMINI_API_KEY for the large tests
-    wait_timer: 0
-    prevent_self_review: false
-    reviewers: []
-    deployment_branch_policy:
-      protected_branches: false
-      custom_branch_policies: true
-    deployment_branch_policies:
-      - name: main
-        type: branch
 
 # POST /repos/{owner}/{repo}/rulesets, or PUT /repos/{owner}/{repo}/rulesets/{ruleset_id}
 # https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset
