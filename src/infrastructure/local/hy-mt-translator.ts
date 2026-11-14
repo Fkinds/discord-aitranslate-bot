@@ -91,11 +91,13 @@ export class HyMtTranslator implements TextTranslator {
       if (message.type !== 'answer') return;
       this.waiting.get(message.id)?.(message);
       this.waiting.delete(message.id);
+      if (this.waiting.size === 0) worker.unref();
     });
     worker.on('error', (error) => this.stop(`it failed: ${error.message}`));
     worker.on('exit', (code) => this.stop(`it exited with code ${code}`));
-    // The model alone does not keep the process running; the bot's connection
-    // to Discord does. After the listeners, as adding one keeps it running again.
+    // The model keeps the process running only while a translation is awaited
+    // (translate() refs it); otherwise the bot's connection to Discord does.
+    // After the listeners, as adding one keeps it running again.
     worker.unref();
   }
 
@@ -128,6 +130,7 @@ export class HyMtTranslator implements TextTranslator {
     const id = this.nextId++;
     const answer = await new Promise<ModelAnswer>((resolve) => {
       this.waiting.set(id, resolve);
+      this.worker.ref();
       this.worker.postMessage({ id, prompt, maxTokens: tokenLimit });
     });
     return translationFrom(answer, into, tokenLimit);

@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { LanguageCode, SUPPORTED_LANGUAGES } from '../../../../src/domain/language-code';
 import { HyMtTranslator } from '../../../../src/infrastructure/local/hy-mt-translator';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
@@ -99,6 +101,31 @@ describe('HyMtTranslator, with the local model', () => {
       } finally {
         await rm(empty, { recursive: true, force: true });
       }
+    },
+    LOCAL_MODEL_TIMEOUT_MS
+  );
+
+  it(
+    'keeps the process running while a translation is awaited, and only then',
+    async () => {
+      // A process in which the translator is the only thing running: it must
+      // wait for the translation, then end by itself.
+      const script = `
+        const { HyMtTranslator } = require('./src/infrastructure/local/hy-mt-translator');
+        const { LanguageCode } = require('./src/domain/language-code');
+        HyMtTranslator.load(process.argv[1])
+          .then((translator) => translator.translate('こんにちは', LanguageCode.of('ko')))
+          .then((translation) => console.log('translated: ' + translation));
+      `;
+      const repository = path.resolve(__dirname, '../../../..');
+
+      const { stdout } = await promisify(execFile)(
+        process.execPath,
+        ['--require', require.resolve('ts-node/register/transpile-only'), '--eval', script, localModelsDir()],
+        { cwd: repository, timeout: LOCAL_MODEL_TIMEOUT_MS / 2 }
+      );
+
+      expect(stdout).toMatch(/^translated: \p{Script=Hangul}/u);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
