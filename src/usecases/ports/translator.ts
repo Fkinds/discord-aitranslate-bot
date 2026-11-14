@@ -8,7 +8,11 @@ export interface SpeechTranslation {
   readonly original: string;
   /** The session's language that was spoken, or null for another language or when it is not known. */
   readonly spokenLanguage: LanguageCode | null;
-  /** What was said, in each of the session's languages, in their order. */
+  /**
+   * What was said, in the session's languages, in their order: at least in
+   * each that it is to be posted in (TranslationLanguages.targetsFor the
+   * spoken language). A translator may leave out the others.
+   */
   readonly translations: ReadonlyArray<{ readonly language: LanguageCode; readonly text: string }>;
 }
 
