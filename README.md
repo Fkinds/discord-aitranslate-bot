@@ -285,7 +285,7 @@ graph LR
 |---------|--------------|
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
-| `pnpm test:medium` | Run the medium tests |
+| `pnpm test:medium` | Run the medium tests; run `pnpm models:download` first |
 | `pnpm test:large` | Run the large tests; needs `GOOGLE_GEMINI_API_KEY` |
 | `pnpm test:watch` | Run the small tests again on every change |
 | `pnpm test:coverage` | Run the small and medium tests with a coverage report |
@@ -298,7 +298,7 @@ Tests are sorted by what they depend on, not by how long they take:
 | Size | May use | Where | Run |
 |------|---------|-------|-----|
 | Small | The process only: no network, not even localhost | `tests/small/` | Before every commit, and in CI |
-| Medium | Servers on localhost, such as stand-ins for the Gemini and Discord APIs | `tests/medium/` | In CI, after the small tests pass |
+| Medium | This machine only: servers on localhost, such as stand-ins for the Gemini and Discord APIs, and the local models | `tests/medium/` | In CI, after the small tests pass |
 | Large | Real outside services: the Gemini API, with a CC0 recording in Japanese | `tests/large/` | By hand, every Monday, and when `main` changes what they depend on; never on pull requests |
 
 The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the small and medium tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. The large tests run in their own workflow (`.github/workflows/large-tests.yml`), with the API key of the `large-tests` environment, which only `main` may use.
@@ -357,7 +357,7 @@ Contributions are welcome! Please follow these steps:
 1. Fork the repository
 2. Create a feature branch
 3. Write tests with your change, in the directory of their size
-4. Make sure `pnpm test`, `pnpm test:medium` and `pnpm lint:layers` pass
+4. Make sure `pnpm test`, `pnpm test:medium` (after `pnpm models:download`) and `pnpm lint:layers` pass
 5. Write commit messages that follow Conventional Commits
 6. Submit a pull request
 

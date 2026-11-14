@@ -61,6 +61,14 @@ jobs:
           runtime: node@${{ matrix.node }}
           cache: true
           require-lockfile: true
+      # The local models (2.2 GB) that the medium tests run. The key changes
+      # whenever the list of model files does.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: models
+          key: local-models-${{ hashFiles('src/infrastructure/local/model-files.ts') }}
+      # Downloads what the cache did not have, and checks the SHA-256 of every file.
+      - run: pnpm models:download
       - run: pnpm test:medium
 
   # Rebase merging puts every commit of a pull request on main as it is, so

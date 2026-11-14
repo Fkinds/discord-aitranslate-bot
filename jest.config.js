@@ -6,7 +6,8 @@ const path = require('node:path');
 //
 //   small   in-process only: no network, file I/O, real time or sleeping.
 //           Real libraries are fine as long as they do no I/O.
-//   medium  this machine only: servers on localhost, no other host.
+//   medium  this machine only: servers on localhost, and the local models that
+//           pnpm models:download puts in models/. No other host.
 //   large   real outside services, such as the Gemini API. Not run on pull
 //           requests (.github/workflows/large-tests.yml).
 //
