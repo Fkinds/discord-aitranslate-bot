@@ -1,17 +1,22 @@
 // @ts-check
-// Runs the translation model with node-llama-cpp, in a worker thread of its own.
-// node-llama-cpp is an ES module with top-level await: this CommonJS project
-// cannot require() it, and Jest cannot import() it. A worker thread loads it
-// with Node's own loader, in the bot and in the tests alike. HyMtTranslator
-// (hy-mt-translator.ts) starts it and sends it the prompts.
-import { parentPort, workerData } from 'node:worker_threads';
+// Runs the translation model with node-llama-cpp, in a child process of its
+// own. node-llama-cpp is an ES module with top-level await: this CommonJS
+// project cannot require() it, and Jest cannot import() it. A child process
+// loads it with Node's own loader, in the bot and in the tests alike, and
+// shares no native state with the speech recognizer (onnxruntime), which made
+// the model write garbage now and then on an Intel Xeon 6975P-C.
+// HyMtTranslator (hy-mt-translator.ts) starts it with its settings as the
+// argument, and sends it the prompts over the IPC channel.
 import { getLlama, LlamaChatSession, LlamaLogLevel } from 'node-llama-cpp';
 
-if (!parentPort) throw new Error('llama-worker.mjs runs only as a worker thread');
-const port = parentPort;
+if (!process.send) throw new Error('llama-worker.mjs runs only as a child process with an IPC channel');
+const send = process.send.bind(process);
 
 /** @type {{ modelPath: string, contextSize: number }} */
-const { modelPath, contextSize } = workerData;
+const { modelPath, contextSize } = JSON.parse(process.argv[2] ?? '{}');
+
+// End with the bot, however the bot ended.
+process.on('disconnect', () => process.exit(0));
 
 /** @typedef {{ id: number, prompt: string, maxTokens: number }} Request */
 
@@ -25,10 +30,10 @@ async function start() {
   const session = new LlamaChatSession({ contextSequence: context.getSequence() });
 
   let previous = Promise.resolve();
-  port.on('message', (/** @type {Request} */ request) => {
+  process.on('message', (/** @type {Request} */ request) => {
     previous = previous.then(() => answer(session, request));
   });
-  port.postMessage({ type: 'ready', gpu: llama.gpu });
+  send({ type: 'ready', gpu: llama.gpu });
 }
 
 /**
@@ -50,16 +55,13 @@ async function answer(session, { id, prompt, maxTokens }) {
       temperature: 0,
       repeatPenalty: { penalty: 1.05 },
     });
-    port.postMessage({ type: 'answer', id, text: responseText, stopReason });
+    send({ type: 'answer', id, text: responseText, stopReason });
   } catch (error) {
-    port.postMessage({ type: 'answer', id, error: error instanceof Error ? error.message : String(error) });
+    send({ type: 'answer', id, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
 start().catch((error) => {
-  // Thrown outside the promise, so that the worker fails with it and
-  // HyMtTranslator hears of it while it waits for the model to load.
-  setImmediate(() => {
-    throw error;
-  });
+  // Tell HyMtTranslator why, then end.
+  send({ type: 'failed', error: error instanceof Error ? error.message : String(error) }, () => process.exit(1));
 });
