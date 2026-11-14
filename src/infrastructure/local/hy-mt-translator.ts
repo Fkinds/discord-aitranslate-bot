@@ -115,6 +115,8 @@ export class HyMtTranslator implements TextTranslator {
       worker.on('error', onError);
       worker.on('exit', onExit);
     });
+    // The model alone does not keep the process running; the bot's connection to Discord does.
+    worker.unref();
     return new HyMtTranslator(worker, ready.gpu);
   }
 

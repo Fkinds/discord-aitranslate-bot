@@ -46,15 +46,28 @@ export async function downloadModels(files: readonly ModelFile[], dir: string, o
   }
 }
 
-async function isIntact(target: string, file: ModelFile): Promise<boolean> {
-  const size = await stat(target).then(
+/**
+ * The files that are not in `dir`, or not of the expected size there. A quick
+ * check for when the bot starts: unlike `pnpm models:download`, it does not
+ * read the files to check their SHA-256.
+ */
+export async function missingModelFiles(files: readonly ModelFile[], dir: string): Promise<ModelFile[]> {
+  const sizes = await Promise.all(files.map((file) => sizeOf(path.join(dir, ...file.path.split('/')))));
+  return files.filter((file, i) => sizes[i] !== file.bytes);
+}
+
+async function sizeOf(target: string): Promise<number | undefined> {
+  return stat(target).then(
     (stats) => (stats.isFile() ? stats.size : undefined),
     (error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return undefined;
       throw error;
     }
   );
-  if (size !== file.bytes) return false;
+}
+
+async function isIntact(target: string, file: ModelFile): Promise<boolean> {
+  if ((await sizeOf(target)) !== file.bytes) return false;
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(target)) hash.update(chunk as Buffer);
   return hash.digest('hex') === file.sha256;

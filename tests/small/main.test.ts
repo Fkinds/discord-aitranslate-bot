@@ -6,21 +6,29 @@ import { PlaceholderTranslator } from '../../src/infrastructure/placeholder-tran
 import { compose, startNoticeFor, translatorFor } from '../../src/main';
 import { FakeLogger } from '../support/fakes/fake-logger';
 
-const config = readConfig({ DISCORD_BOT_TOKEN: 'token', DISCORD_CLIENT_ID: '123', TRANSLATOR: 'fake' });
+const config = readConfig({ DISCORD_BOT_TOKEN: 'token', DISCORD_CLIENT_ID: '123', TRANSLATOR: 'fake' }, '/srv/bot');
 
+// The local translator loads its models from files: tests/medium/main.test.ts.
 describe('translatorFor', () => {
-  it('translates with Gemini by default', () => {
-    expect(translatorFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' }, new FakeLogger())).toBeInstanceOf(
-      GeminiTranslator
-    );
+  it('translates with Gemini with TRANSLATOR=gemini', async () => {
+    await expect(
+      translatorFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' }, new FakeLogger())
+    ).resolves.toBeInstanceOf(GeminiTranslator);
   });
 
-  it('stands in a placeholder with TRANSLATOR=fake', () => {
-    expect(translatorFor({ kind: 'fake' }, new FakeLogger())).toBeInstanceOf(PlaceholderTranslator);
+  it('stands in a placeholder with TRANSLATOR=fake', async () => {
+    await expect(translatorFor({ kind: 'fake' }, new FakeLogger())).resolves.toBeInstanceOf(PlaceholderTranslator);
   });
 });
 
 describe('startNoticeFor', () => {
+  it('says that what is said stays on the machine the bot runs on', () => {
+    expect(startNoticeFor({ kind: 'local', modelsDir: '/srv/bot/models' })).toBe(
+      "What is said there is transcribed and translated on the bot's own machine, and is not sent anywhere else."
+    );
+  });
+
+
   it('says that what is said goes to Google Gemini', () => {
     expect(startNoticeFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' })).toContain('sent to Google Gemini');
   });
@@ -33,7 +41,7 @@ describe('startNoticeFor', () => {
 describe('compose', () => {
   it('answers the slash commands Discord sends', async () => {
     const client = new Client({ intents: [] });
-    compose(config, client, new FakeLogger());
+    compose(config, client, new PlaceholderTranslator(), new FakeLogger());
     const replies: unknown[] = [];
     let answered!: () => void;
     const done = new Promise<void>((resolve) => (answered = resolve));
@@ -58,7 +66,7 @@ describe('compose', () => {
 
   it('ignores interactions other than slash commands', () => {
     const client = new Client({ intents: [] });
-    compose(config, client, new FakeLogger());
+    compose(config, client, new PlaceholderTranslator(), new FakeLogger());
 
     expect(() => client.emit(Events.InteractionCreate, { isChatInputCommand: () => false } as never)).not.toThrow();
   });

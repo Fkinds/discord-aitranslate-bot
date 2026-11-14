@@ -17,7 +17,7 @@ describe('Gemini translation, against the Gemini API', () => {
   it('hears Japanese, and translates what was said into English', async () => {
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey) throw new Error('Set GOOGLE_GEMINI_API_KEY to run the large tests');
-    const translator = translatorFor({ kind: 'gemini', apiKey, model: DEFAULT_GEMINI_MODEL }, new FakeLogger());
+    const translator = await translatorFor({ kind: 'gemini', apiKey, model: DEFAULT_GEMINI_MODEL }, new FakeLogger());
     const speech = recordedSpeech();
 
     const translation = await translator.translate(speech, TranslationLanguages.of(JA, EN));
