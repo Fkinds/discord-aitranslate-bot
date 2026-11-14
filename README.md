@@ -285,7 +285,7 @@ graph LR
 |---------|--------------|
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
-| `pnpm test:medium` | Run the medium tests; run `pnpm models:download` first |
+| `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download` first |
 | `pnpm test:large` | Run the large tests; needs `GOOGLE_GEMINI_API_KEY` |
 | `pnpm test:watch` | Run the small tests again on every change |
 | `pnpm test:coverage` | Run the small and medium tests with a coverage report |

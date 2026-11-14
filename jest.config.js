@@ -11,6 +11,10 @@ const path = require('node:path');
 //   large   real outside services, such as the Gemini API. Not run on pull
 //           requests (.github/workflows/large-tests.yml).
 //
+// The medium tests run one file at a time (--runInBand in package.json): the
+// local models use every CPU core they find, and llama.cpp slows to a crawl
+// when its threads share the cores with another model's.
+//
 // The first directory under tests/ is the size. Network access is enforced
 // per size by tests/support/network-policy-environment.js.
 const SIZES = {
