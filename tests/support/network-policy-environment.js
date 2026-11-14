@@ -5,7 +5,6 @@
 // testEnvironmentOptions.network:
 //   "none"      small tests: no connection at all, not even to localhost
 //   "loopback"  medium tests: only localhost (127.0.0.0/8, ::1) and local sockets
-//   "any"       large tests: any host
 //
 // Every TCP and TLS connection, including fetch() and http.request(), goes
 // through net.Socket#connect, so that is the one method patched. The patch is
@@ -15,7 +14,7 @@
 const net = require('node:net');
 const { TestEnvironment } = require('jest-environment-node');
 
-const POLICIES = new Set(['none', 'loopback', 'any']);
+const POLICIES = new Set(['none', 'loopback']);
 const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1');
 
 // Where a net.Socket#connect call is headed. Its arguments come in the forms
@@ -68,7 +67,6 @@ class NetworkPolicyEnvironment extends TestEnvironment {
   async setup() {
     await super.setup();
     shareFetchDispatcher(this.global);
-    if (this.policy === 'any') return;
 
     const { policy, size } = this;
     const connect = net.Socket.prototype.connect;

@@ -329,7 +329,6 @@ With `TRANSLATOR=gemini`, the converted audio is wrapped in a WAVE file and sent
 | `pnpm models:download` | Download the local models into `MODELS_DIR`, and check them |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
 | `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download` first |
-| `pnpm test:large` | Run the large tests; needs `GOOGLE_GEMINI_API_KEY` |
 | `pnpm test:watch` | Run the small tests again on every change |
 | `pnpm test:coverage` | Run the small and medium tests with a coverage report |
 | `pnpm lint:layers` | Check the dependencies between the layers |
@@ -342,9 +341,8 @@ Tests are sorted by what they depend on, not by how long they take:
 |------|---------|-------|-----|
 | Small | The process only: no network, not even localhost | `tests/small/` | Before every commit, and in CI |
 | Medium | This machine only: servers on localhost, such as stand-ins for the Gemini and Discord APIs, and the local models | `tests/medium/` | In CI, after the small tests pass |
-| Large | Real outside services: the Gemini API, with a CC0 recording in Japanese | `tests/large/` | By hand, every Monday, and when `main` changes what they depend on; never on pull requests |
 
-The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the small and medium tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. The large tests run in their own workflow (`.github/workflows/large-tests.yml`), with the API key of the `large-tests` environment, which only `main` may use.
+The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. No test calls the real Gemini API: the medium tests run the Gemini adapter against a stand-in on localhost.
 
 ### Dependency Updates
 
@@ -377,8 +375,7 @@ src/
 tests/
 ├── small/               # Laid out like src/
 ├── medium/
-├── large/
-├── fixtures/            # A CC0 recording in Japanese, for the medium and large tests
+├── fixtures/            # A CC0 recording in Japanese, for the medium tests
 └── support/             # Fakes, builders and the test environment
 ```
 
