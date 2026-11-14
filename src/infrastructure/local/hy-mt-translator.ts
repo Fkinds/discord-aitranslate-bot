@@ -94,6 +94,9 @@ export class HyMtTranslator implements TextTranslator {
     });
     worker.on('error', (error) => this.stop(`it failed: ${error.message}`));
     worker.on('exit', (code) => this.stop(`it exited with code ${code}`));
+    // The model alone does not keep the process running; the bot's connection
+    // to Discord does. After the listeners, as adding one keeps it running again.
+    worker.unref();
   }
 
   /** Load the model from `modelsDir`, where `pnpm models:download` put it. */
@@ -115,8 +118,6 @@ export class HyMtTranslator implements TextTranslator {
       worker.on('error', onError);
       worker.on('exit', onExit);
     });
-    // The model alone does not keep the process running; the bot's connection to Discord does.
-    worker.unref();
     return new HyMtTranslator(worker, ready.gpu);
   }
 
