@@ -1,12 +1,14 @@
 import path from 'node:path';
-import { LanguageCode } from '../domain/language-code';
+import { LanguageCode, SUPPORTED_LANGUAGES } from '../domain/language-code';
 import { DomainError } from '../domain/shared/domain-error';
 import { TranslationLanguages } from '../domain/translation-languages';
+import { translatesInto } from './local/hy-mt-translator';
 
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type TranslatorConfig =
+  | { readonly kind: 'local'; readonly modelsDir: string }
   | { readonly kind: 'gemini'; readonly apiKey: string; readonly model: string }
   | { readonly kind: 'fake' };
 
@@ -40,17 +42,17 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 /**
  * Read the settings from environment variables. An empty variable counts as
- * unset, as it always has.
+ * unset, as it always has. A relative MODELS_DIR is taken from `workingDir`.
  *
  * @throws ConfigError naming every required variable that is missing, or the
  *   first malformed one.
  */
-export function readConfig(env: Env): Config {
+export function readConfig(env: Env, workingDir: string): Config {
   const value = (name: string): string | undefined => env[name] || undefined;
 
-  const translatorKind = value('TRANSLATOR') ?? 'gemini';
-  if (translatorKind !== 'gemini' && translatorKind !== 'fake') {
-    throw new ConfigError(`TRANSLATOR must be "gemini" or "fake", got ${JSON.stringify(translatorKind)}`);
+  const translatorKind = value('TRANSLATOR') ?? 'local';
+  if (translatorKind !== 'local' && translatorKind !== 'gemini' && translatorKind !== 'fake') {
+    throw new ConfigError(`TRANSLATOR must be "local", "gemini" or "fake", got ${JSON.stringify(translatorKind)}`);
   }
 
   const required = ['DISCORD_BOT_TOKEN', 'DISCORD_CLIENT_ID', ...(translatorKind === 'gemini' ? ['GOOGLE_GEMINI_API_KEY'] : [])];
@@ -59,16 +61,41 @@ export function readConfig(env: Env): Config {
     throw new ConfigError(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
+  const defaultLanguages = languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja');
+  const untranslatable = defaultLanguages.languages.filter((language) => !translatesInto(language));
+  if (translatorKind === 'local' && untranslatable.length > 0) {
+    throw new ConfigError(
+      `DEFAULT_TARGET_LANGUAGE: the local translator does not translate into ${untranslatable.join(', ')}. ` +
+        `Use the languages offered in the commands (${SUPPORTED_LANGUAGES.join(', ')}), or TRANSLATOR=gemini`
+    );
+  }
+
   return {
     discordToken: value('DISCORD_BOT_TOKEN')!,
     discordClientId: value('DISCORD_CLIENT_ID')!,
-    translator:
-      translatorKind === 'gemini'
-        ? { kind: 'gemini', apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL }
-        : { kind: 'fake' },
-    defaultLanguages: languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja'),
+    translator: translatorFrom(translatorKind, value, workingDir),
+    defaultLanguages,
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
   };
+}
+
+function translatorFrom(
+  kind: TranslatorConfig['kind'],
+  value: (name: string) => string | undefined,
+  workingDir: string
+): TranslatorConfig {
+  switch (kind) {
+    case 'local':
+      return { kind, modelsDir: modelsDirFrom(value, workingDir) };
+    case 'gemini':
+      return { kind, apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL };
+    case 'fake':
+      return { kind };
+  }
+}
+
+function modelsDirFrom(value: (name: string) => string | undefined, workingDir: string): string {
+  return path.resolve(workingDir, value('MODELS_DIR') ?? DEFAULT_MODELS_DIR);
 }
 
 /** The settings for `pnpm models:download`, which needs no Discord or Gemini keys. */
@@ -87,7 +114,7 @@ export interface ModelsConfig {
 export function readModelsConfig(env: Env, workingDir: string): ModelsConfig {
   const value = (name: string): string | undefined => env[name] || undefined;
   return {
-    modelsDir: path.resolve(workingDir, value('MODELS_DIR') ?? DEFAULT_MODELS_DIR),
+    modelsDir: modelsDirFrom(value, workingDir),
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
   };
 }

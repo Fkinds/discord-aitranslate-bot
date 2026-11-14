@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { downloadModels, ModelDownloadFailed } from '../../../../src/infrastructure/local/model-download';
+import { downloadModels, missingModelFiles, ModelDownloadFailed } from '../../../../src/infrastructure/local/model-download';
 import type { ModelFile } from '../../../../src/infrastructure/local/model-files';
 import { FakeLogger } from '../../../support/fakes/fake-logger';
 import { HttpStub } from '../../../support/http-stub';
@@ -109,5 +109,39 @@ describe('downloadModels', () => {
     await expect(download([fileOf('weights.bin', WEIGHTS)], 50)).rejects.toThrow(
       `model/weights.bin: no data from ${source.url}/weights.bin for 50 ms`
     );
+  });
+});
+
+describe('missingModelFiles', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'models-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const fileOf = (name: string, contents: Buffer): ModelFile => ({
+    path: `model/${name}`,
+    url: `https://example.com/${name}`,
+    bytes: contents.length,
+    sha256: sha256(contents),
+  });
+
+  it('lists the files that are not there, or not of the expected size, without reading them', async () => {
+    await mkdir(path.join(dir, 'model'));
+    await writeFile(path.join(dir, 'model', 'weights.bin'), WEIGHTS);
+    await writeFile(path.join(dir, 'model', 'tokens.txt'), TOKENS.subarray(1));
+    const files = [fileOf('weights.bin', WEIGHTS), fileOf('tokens.txt', TOKENS), fileOf('extra.bin', WEIGHTS)];
+
+    expect((await missingModelFiles(files, dir)).map((file) => file.path)).toEqual(['model/tokens.txt', 'model/extra.bin']);
+  });
+
+  it('lists every file when the directory is not there', async () => {
+    const files = [fileOf('weights.bin', WEIGHTS)];
+
+    expect(await missingModelFiles(files, path.join(dir, 'nowhere'))).toEqual(files);
   });
 });
