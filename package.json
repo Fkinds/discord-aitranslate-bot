@@ -9,6 +9,7 @@
     "dev": "ts-node --max-old-space-size=256 src/main.ts",
     "watch": "tsc -w",
     "deploy-commands": "ts-node src/deploy-commands.ts",
+    "models:download": "ts-node src/download-models.ts",
     "test": "jest --selectProjects small",
     "test:small": "jest --selectProjects small",
     "test:medium": "jest --selectProjects medium",

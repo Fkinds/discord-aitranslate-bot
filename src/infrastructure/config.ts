@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { LanguageCode } from '../domain/language-code';
 import { DomainError } from '../domain/shared/domain-error';
 import { TranslationLanguages } from '../domain/translation-languages';
@@ -32,6 +33,9 @@ export class ConfigError extends Error {
  */
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
+/** Where the local models are kept when MODELS_DIR is unset, relative to the working directory. */
+export const DEFAULT_MODELS_DIR = 'models';
+
 type Env = Readonly<Record<string, string | undefined>>;
 
 /**
@@ -63,6 +67,27 @@ export function readConfig(env: Env): Config {
         ? { kind: 'gemini', apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL }
         : { kind: 'fake' },
     defaultLanguages: languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja'),
+    logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
+  };
+}
+
+/** The settings for `pnpm models:download`, which needs no Discord or Gemini keys. */
+export interface ModelsConfig {
+  /** An absolute path. */
+  readonly modelsDir: string;
+  readonly logLevel: LogLevel;
+}
+
+/**
+ * Read the settings for downloading the local models. A relative MODELS_DIR is
+ * taken from `workingDir`.
+ *
+ * @throws ConfigError when a setting is malformed.
+ */
+export function readModelsConfig(env: Env, workingDir: string): ModelsConfig {
+  const value = (name: string): string | undefined => env[name] || undefined;
+  return {
+    modelsDir: path.resolve(workingDir, value('MODELS_DIR') ?? DEFAULT_MODELS_DIR),
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
   };
 }
