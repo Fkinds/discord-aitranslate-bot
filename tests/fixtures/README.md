@@ -17,7 +17,7 @@ To check that the file is the one published, compare its SHA-1 with the one
 the Commons API gives:
 
 ```bash
-shasum tests/large/fixtures/ja-iwata-san-no-kuruma.wav
+shasum tests/fixtures/ja-iwata-san-no-kuruma.wav
 curl -sG https://commons.wikimedia.org/w/api.php \
   --data-urlencode action=query --data-urlencode prop=imageinfo \
   --data-urlencode iiprop=sha1 --data-urlencode format=json \
