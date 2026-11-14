@@ -11,7 +11,7 @@ export interface RecordedRequest {
 
 export interface StubResponse {
   readonly status: number;
-  /** Sent as JSON. */
+  /** Sent as it is when it is bytes, and as JSON otherwise. */
   readonly body: unknown;
   /** How long to hold the response back. */
   readonly delayMs?: number;
@@ -62,8 +62,13 @@ export class HttpStub {
       const response = this.responses.shift() ?? { status: 500, body: { error: 'HttpStub has no response left' } };
       const send = () => {
         if (res.destroyed) return;
-        res.writeHead(response.status, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(response.body));
+        if (response.body instanceof Uint8Array) {
+          res.writeHead(response.status, { 'content-type': 'application/octet-stream' });
+          res.end(response.body);
+        } else {
+          res.writeHead(response.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(response.body));
+        }
       };
       if (response.delayMs) setTimeout(send, response.delayMs).unref();
       else send();

@@ -5,8 +5,9 @@
 //   usecases        domain
 //   infrastructure  domain, usecases, npm packages, Node.js modules
 //   interfaces      domain, usecases, npm packages, Node.js modules
-//   main.ts and     everything (the entry points, which compose the layers)
-//   deploy-commands.ts
+//   main.ts,        everything (the entry points, which compose the layers)
+//   deploy-commands.ts,
+//   download-models.ts
 //
 // Nothing depends on the entry points.
 
@@ -46,7 +47,7 @@ module.exports = {
       comment: 'The entry points compose the layers; nothing imports them.',
       severity: 'error',
       from: {},
-      to: { path: '^src/(main|deploy-commands)\\.ts$' },
+      to: { path: '^src/(main|deploy-commands|download-models)\\.ts$' },
     },
     {
       name: 'no-circular',

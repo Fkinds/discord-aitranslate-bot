@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { ConfigError, readConfig } from '../../../src/infrastructure/config';
+import { ConfigError, readConfig, readModelsConfig } from '../../../src/infrastructure/config';
 
 const REQUIRED = {
   DISCORD_BOT_TOKEN: 'token',
@@ -81,5 +81,24 @@ describe('readConfig', () => {
 
   it('rejects a log level other than those listed in .env.example', () => {
     expect(() => readConfig({ ...REQUIRED, LOG_LEVEL: 'verbose' })).toThrow(ConfigError);
+  });
+});
+
+describe('readModelsConfig', () => {
+  it('keeps the models in models/ under the working directory, needing no keys', () => {
+    expect(readModelsConfig({}, '/srv/bot')).toEqual({ modelsDir: '/srv/bot/models', logLevel: 'info' });
+  });
+
+  it.each([
+    ['an absolute directory as it is', '/var/cache/models', '/var/cache/models'],
+    ['a relative directory from the working directory', '../shared/models', '/srv/shared/models'],
+    ['an empty one as unset', '', '/srv/bot/models'],
+  ])('takes %s', (_case, modelsDir, expected) => {
+    expect(readModelsConfig({ MODELS_DIR: modelsDir }, '/srv/bot').modelsDir).toBe(expected);
+  });
+
+  it('reads the log level, rejecting one not listed in .env.example', () => {
+    expect(readModelsConfig({ LOG_LEVEL: 'debug' }, '/srv/bot').logLevel).toBe('debug');
+    expect(() => readModelsConfig({ LOG_LEVEL: 'verbose' }, '/srv/bot')).toThrow(ConfigError);
   });
 });
