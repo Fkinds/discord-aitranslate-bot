@@ -73,6 +73,9 @@ export const TRANSLATION_MODEL = {
   },
 } as const satisfies Record<string, ModelFile>;
 
+/** The files for hearing speech on this machine: the voice detector and Whisper. */
+export const SPEECH_MODEL_FILES: readonly ModelFile[] = Object.freeze([...Object.values(VAD_MODEL), ...Object.values(WHISPER_MODEL)]);
+
 /** Every file the local translator needs: what `pnpm models:download` downloads. */
 export const LOCAL_MODEL_FILES: readonly ModelFile[] = Object.freeze([
   ...Object.values(VAD_MODEL),

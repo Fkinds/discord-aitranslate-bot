@@ -8,6 +8,7 @@ export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type TranslatorConfig =
+  | { readonly kind: 'claude'; readonly apiKey: string; readonly modelsDir: string }
   | { readonly kind: 'local'; readonly modelsDir: string }
   | { readonly kind: 'gemini'; readonly apiKey: string; readonly model: string }
   | { readonly kind: 'fake' };
@@ -40,6 +41,23 @@ export const DEFAULT_MODELS_DIR = 'models';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
+type TranslatorKind = TranslatorConfig['kind'];
+
+/** The values of TRANSLATOR; the first is the default. */
+const TRANSLATORS: readonly TranslatorKind[] = ['claude', 'local', 'gemini', 'fake'];
+
+function isTranslatorKind(value: string): value is TranslatorKind {
+  return (TRANSLATORS as readonly string[]).includes(value);
+}
+
+/** The variable that holds the API key each translator needs, if it needs one. */
+const API_KEYS: Readonly<Record<TranslatorKind, string | undefined>> = {
+  claude: 'ANTHROPIC_API_KEY',
+  local: undefined,
+  gemini: 'GOOGLE_GEMINI_API_KEY',
+  fake: undefined,
+};
+
 /**
  * Read the settings from environment variables. An empty variable counts as
  * unset, as it always has. A relative MODELS_DIR is taken from `workingDir`.
@@ -50,12 +68,13 @@ type Env = Readonly<Record<string, string | undefined>>;
 export function readConfig(env: Env, workingDir: string): Config {
   const value = (name: string): string | undefined => env[name] || undefined;
 
-  const translatorKind = value('TRANSLATOR') ?? 'local';
-  if (translatorKind !== 'local' && translatorKind !== 'gemini' && translatorKind !== 'fake') {
-    throw new ConfigError(`TRANSLATOR must be "local", "gemini" or "fake", got ${JSON.stringify(translatorKind)}`);
+  const kind = value('TRANSLATOR') ?? TRANSLATORS[0]!;
+  if (!isTranslatorKind(kind)) {
+    throw new ConfigError(`TRANSLATOR must be one of ${TRANSLATORS.join(', ')}, got ${JSON.stringify(kind)}`);
   }
 
-  const required = ['DISCORD_BOT_TOKEN', 'DISCORD_CLIENT_ID', ...(translatorKind === 'gemini' ? ['GOOGLE_GEMINI_API_KEY'] : [])];
+  const apiKey = API_KEYS[kind];
+  const required = ['DISCORD_BOT_TOKEN', 'DISCORD_CLIENT_ID', ...(apiKey === undefined ? [] : [apiKey])];
   const missing = required.filter((name) => value(name) === undefined);
   if (missing.length > 0) {
     throw new ConfigError(`Missing required environment variables: ${missing.join(', ')}`);
@@ -63,9 +82,9 @@ export function readConfig(env: Env, workingDir: string): Config {
 
   const defaultLanguages = languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja');
   const untranslatable = defaultLanguages.languages.filter((language) => !translatesInto(language));
-  if (translatorKind === 'local' && untranslatable.length > 0) {
+  if ((kind === 'claude' || kind === 'local') && untranslatable.length > 0) {
     throw new ConfigError(
-      `DEFAULT_TARGET_LANGUAGE: the local translator does not translate into ${untranslatable.join(', ')}. ` +
+      `DEFAULT_TARGET_LANGUAGE: TRANSLATOR=${kind} does not translate into ${untranslatable.join(', ')}. ` +
         `Use the languages offered in the commands (${SUPPORTED_LANGUAGES.join(', ')}), or TRANSLATOR=gemini`
     );
   }
@@ -73,18 +92,20 @@ export function readConfig(env: Env, workingDir: string): Config {
   return {
     discordToken: value('DISCORD_BOT_TOKEN')!,
     discordClientId: value('DISCORD_CLIENT_ID')!,
-    translator: translatorFrom(translatorKind, value, workingDir),
+    translator: translatorFrom(kind, value, workingDir),
     defaultLanguages,
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
   };
 }
 
 function translatorFrom(
-  kind: TranslatorConfig['kind'],
+  kind: TranslatorKind,
   value: (name: string) => string | undefined,
   workingDir: string
 ): TranslatorConfig {
   switch (kind) {
+    case 'claude':
+      return { kind, apiKey: value('ANTHROPIC_API_KEY')!, modelsDir: modelsDirFrom(value, workingDir) };
     case 'local':
       return { kind, modelsDir: modelsDirFrom(value, workingDir) };
     case 'gemini':

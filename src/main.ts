@@ -5,11 +5,13 @@ import sodium from 'libsodium-wrappers';
 import { type Config, readConfig, type TranslatorConfig } from './infrastructure/config';
 import { DiscordTranslationPublisher } from './infrastructure/discord/discord-translation-publisher';
 import { DiscordVoice } from './infrastructure/discord/discord-voice';
+import { ClaudeTextTranslator } from './infrastructure/claude/claude-text-translator';
 import { GeminiTranslator, geminiModel } from './infrastructure/gemini/gemini-translator';
 import { LocalTranslator } from './infrastructure/local/local-translator';
 import { missingModelFiles } from './infrastructure/local/model-download';
-import { LOCAL_MODEL_FILES } from './infrastructure/local/model-files';
+import { LOCAL_MODEL_FILES, SPEECH_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
 import { OneAtATime } from './infrastructure/local/one-at-a-time';
+import { WhisperRecognizer } from './infrastructure/local/whisper-recognizer';
 import { PlaceholderTranslator } from './infrastructure/placeholder-translator';
 import { createLogger } from './infrastructure/winston-logger';
 import { CommandHandler } from './interfaces/discord/command-handler';
@@ -29,27 +31,42 @@ import { TranslateUtterance } from './usecases/translate-utterance';
 /** The CPU threads Whisper uses on this machine. */
 const LOCAL_THREADS = 4;
 
+/** Fail, saying which files are missing and what to do, unless every one of them is in `modelsDir`. */
+async function requireModels(files: readonly ModelFile[], modelsDir: string): Promise<void> {
+  const missing = await missingModelFiles(files, modelsDir);
+  if (missing.length > 0) {
+    throw new Error(
+      `The local models are missing from ${modelsDir}: ${missing.map((file) => file.path).join(', ')}. ` +
+        'Run pnpm models:download, or set MODELS_DIR to where they are'
+    );
+  }
+}
+
 /**
  * The translator the settings ask for.
  *
- * The local translator loads its models now, so that missing models stop the
- * bot at startup and the first utterance does not wait for them; it takes the
- * utterances one at a time. Each Gemini request may take 15 s; a transient
- * failure is tried again up to 3 attempts in all, 1 s and then 2 s apart, or
- * after the wait Gemini asks for when that is at most 5 s.
+ * Whisper, for Claude and for the local translator, loads its models now, so
+ * that missing models stop the bot at startup and the first utterance does
+ * not wait for them; both take the utterances one at a time. Each Claude and
+ * Gemini request may take 15 s. Claude's SDK tries a failure that may pass
+ * again, up to 3 attempts in all. A transient Gemini failure is tried again up
+ * to 3 attempts in all, 1 s and then 2 s apart, or after the wait Gemini asks
+ * for when that is at most 5 s.
  *
  * @throws Error when the local models are missing or cannot be loaded.
  */
 export async function translatorFor(config: TranslatorConfig, logger: Logger, clock: Clock = () => new Date()): Promise<Translator> {
   switch (config.kind) {
+    case 'claude': {
+      await requireModels(SPEECH_MODEL_FILES, config.modelsDir);
+      logger.info('Loading the local models', { modelsDir: config.modelsDir });
+      const recognizer = await WhisperRecognizer.load(config.modelsDir, { threads: LOCAL_THREADS });
+      logger.info('Loaded the local models');
+      const claude = new ClaudeTextTranslator(config.apiKey, { timeoutMs: 15_000, maxRetries: 2 }, logger);
+      return new OneAtATime(new LocalTranslator(recognizer, claude), clock, logger);
+    }
     case 'local': {
-      const missing = await missingModelFiles(LOCAL_MODEL_FILES, config.modelsDir);
-      if (missing.length > 0) {
-        throw new Error(
-          `The local models are missing from ${config.modelsDir}: ${missing.map((file) => file.path).join(', ')}. ` +
-            'Run pnpm models:download, or set MODELS_DIR to where they are'
-        );
-      }
+      await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
       logger.info('Loading the local models', { modelsDir: config.modelsDir });
       const translator = await LocalTranslator.load(config.modelsDir, { threads: LOCAL_THREADS });
       logger.info('Loaded the local models');
@@ -69,6 +86,8 @@ export async function translatorFor(config: TranslatorConfig, logger: Logger, cl
 /** What the notice that translation started says about where what is said goes. */
 export function startNoticeFor(config: TranslatorConfig): string {
   switch (config.kind) {
+    case 'claude':
+      return "What is said there is transcribed on the bot's own machine, and the text is sent to Anthropic's Claude to be translated.";
     case 'local':
       return "What is said there is transcribed and translated on the bot's own machine, and is not sent anywhere else.";
     case 'gemini':
