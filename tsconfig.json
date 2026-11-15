@@ -10,7 +10,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    // node10 resolution is deprecated in TypeScript 6 and gone in 7, which
+    // Renovate holds back (renovate.json). Moving to node16 conflicts with
+    // how @google/genai ships its types (TS1479); left for TypeScript 7.
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
