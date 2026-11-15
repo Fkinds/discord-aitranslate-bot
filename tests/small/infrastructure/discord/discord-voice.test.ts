@@ -85,7 +85,11 @@ describe('DiscordVoice', () => {
         selfDeaf: true,
         selfMute: false,
       });
-      expect(entersState).toHaveBeenCalledWith(connection, VoiceConnectionStatus.Ready, 10_000);
+      expect(connectionEntersState).toHaveBeenCalledWith(
+        connection as unknown as VoiceConnection,
+        VoiceConnectionStatus.Ready,
+        10_000
+      );
     });
 
     it('counts a connection still on its way after the wait as joined', async () => {
@@ -161,7 +165,11 @@ describe('DiscordVoice', () => {
       connection.emit(VoiceConnectionStatus.Disconnected);
       await flush();
 
-      expect(entersState).toHaveBeenCalledWith(connection, VoiceConnectionStatus.Signalling, 5_000);
+      expect(connectionEntersState).toHaveBeenCalledWith(
+        connection as unknown as VoiceConnection,
+        VoiceConnectionStatus.Signalling,
+        5_000
+      );
       expect(connection.destroy).toHaveBeenCalled();
       expect(listener.events).toEqual(['disconnected 1']);
     });
