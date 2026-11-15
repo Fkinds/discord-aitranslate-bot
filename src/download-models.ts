@@ -6,7 +6,7 @@ import { createLogger } from './infrastructure/winston-logger';
 
 /** Download the models for hearing speech on this machine into MODELS_DIR, keeping the files already there and intact. */
 async function downloadLocalModels(): Promise<void> {
-  dotenv.config();
+  dotenv.config({ quiet: true });
   const config = readModelsConfig(process.env, process.cwd());
   const logger = createLogger(config.logLevel);
 

@@ -7,7 +7,7 @@ import { COMMANDS } from './interfaces/discord/commands';
 
 /** Register the slash commands with Discord, for every server the bot is in. */
 async function deployCommands(): Promise<void> {
-  dotenv.config();
+  dotenv.config({ quiet: true });
   const config = readConfig(process.env, process.cwd());
   const logger = createLogger(config.logLevel);
 
