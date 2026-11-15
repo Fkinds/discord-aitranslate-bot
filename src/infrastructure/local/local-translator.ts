@@ -6,10 +6,11 @@ import type { TextTranslator } from './text-translator';
 import { spokenLanguageAmong, WhisperRecognizer, type RecognizerOptions, type SpeechRecognizer } from './whisper-recognizer';
 
 /**
- * Translates on this machine, sending nothing anywhere: Whisper hears what was
- * said and in which language, then Hy-MT2 translates it into each of the
- * session's languages that it is to be posted in. It translates into no other,
- * not even into the language that was spoken.
+ * Hears speech on this machine, then has it translated: Whisper hears what was
+ * said and in which language, then the text translator (Claude, or Hy-MT2 on
+ * this machine) translates it into each of the session's languages that it is
+ * to be posted in. It translates into no other, not even into the language
+ * that was spoken.
  */
 export class LocalTranslator implements Translator {
   constructor(

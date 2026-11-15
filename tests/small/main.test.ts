@@ -22,6 +22,12 @@ describe('translatorFor', () => {
 });
 
 describe('startNoticeFor', () => {
+  it('says that what is said is transcribed on the machine the bot runs on, and the text goes to Claude', () => {
+    expect(startNoticeFor({ kind: 'claude', apiKey: 'key', modelsDir: '/srv/bot/models' })).toBe(
+      "What is said there is transcribed on the bot's own machine, and the text is sent to Anthropic's Claude to be translated."
+    );
+  });
+
   it('says that what is said stays on the machine the bot runs on', () => {
     expect(startNoticeFor({ kind: 'local', modelsDir: '/srv/bot/models' })).toBe(
       "What is said there is transcribed and translated on the bot's own machine, and is not sent anywhere else."

@@ -6,6 +6,7 @@ const CWD = '/srv/bot';
 const REQUIRED = {
   DISCORD_BOT_TOKEN: 'token',
   DISCORD_CLIENT_ID: '123',
+  ANTHROPIC_API_KEY: 'anthropic-key',
   GOOGLE_GEMINI_API_KEY: 'key',
 };
 
@@ -23,10 +24,10 @@ describe('readConfig', () => {
     expect(config.logLevel).toBe('debug');
   });
 
-  it('falls back to the defaults: translating on this machine, with the models in models/', () => {
+  it('falls back to the defaults: hearing speech on this machine, with the models in models/, and translating with Claude', () => {
     const config = readConfig(REQUIRED, CWD);
 
-    expect(config.translator).toEqual({ kind: 'local', modelsDir: '/srv/bot/models' });
+    expect(config.translator).toEqual({ kind: 'claude', apiKey: 'anthropic-key', modelsDir: '/srv/bot/models' });
     expect(config.defaultLanguages.toString()).toBe('ja');
     expect(config.logLevel).toBe('info');
   });
@@ -34,7 +35,7 @@ describe('readConfig', () => {
   it('takes an empty variable as unset, as it always has', () => {
     const config = readConfig({ ...REQUIRED, TRANSLATOR: '', MODELS_DIR: '', DEFAULT_TARGET_LANGUAGE: '', LOG_LEVEL: '' }, CWD);
 
-    expect(config.translator).toEqual({ kind: 'local', modelsDir: '/srv/bot/models' });
+    expect(config.translator).toEqual({ kind: 'claude', apiKey: 'anthropic-key', modelsDir: '/srv/bot/models' });
     expect(readConfig({ ...REQUIRED, TRANSLATOR: 'gemini', GEMINI_MODEL: '' }, CWD).translator).toMatchObject({
       model: 'gemini-3.8-flash',
     });
@@ -42,23 +43,32 @@ describe('readConfig', () => {
     expect(() => readConfig({ ...REQUIRED, DISCORD_BOT_TOKEN: '' }, CWD)).toThrow('DISCORD_BOT_TOKEN');
   });
 
-  it('names every missing variable at once', () => {
-    expect(() => readConfig({ TRANSLATOR: 'gemini' }, CWD)).toThrow(
-      new ConfigError('Missing required environment variables: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, GOOGLE_GEMINI_API_KEY')
+  it.each([
+    ['claude', 'ANTHROPIC_API_KEY'],
+    ['gemini', 'GOOGLE_GEMINI_API_KEY'],
+  ])('names every missing variable at once, with the API key TRANSLATOR=%s needs', (translator, apiKey) => {
+    expect(() => readConfig({ TRANSLATOR: translator }, CWD)).toThrow(
+      new ConfigError(`Missing required environment variables: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, ${apiKey}`)
     );
   });
 
-  it.each(['local', 'fake'])('needs no Gemini API key with TRANSLATOR=%s', (translator) => {
-    const { GOOGLE_GEMINI_API_KEY: _key, ...withoutKey } = REQUIRED;
+  it('needs the Anthropic API key by default', () => {
+    const { ANTHROPIC_API_KEY: _key, ...withoutKey } = REQUIRED;
 
-    expect(readConfig({ ...withoutKey, TRANSLATOR: translator }, CWD).translator.kind).toBe(translator);
+    expect(() => readConfig(withoutKey, CWD)).toThrow('Missing required environment variables: ANTHROPIC_API_KEY');
+  });
+
+  it.each(['local', 'fake'])('needs no API key with TRANSLATOR=%s', (translator) => {
+    const { ANTHROPIC_API_KEY: _anthropic, GOOGLE_GEMINI_API_KEY: _gemini, ...withoutKeys } = REQUIRED;
+
+    expect(readConfig({ ...withoutKeys, TRANSLATOR: translator }, CWD).translator.kind).toBe(translator);
   });
 
   it.each([
     ['an absolute directory as it is', '/var/cache/models', '/var/cache/models'],
     ['a relative directory from the working directory', '../shared/models', '/srv/shared/models'],
   ])('takes MODELS_DIR, %s', (_case, modelsDir, expected) => {
-    expect(readConfig({ ...REQUIRED, MODELS_DIR: modelsDir }, CWD).translator).toEqual({ kind: 'local', modelsDir: expected });
+    expect(readConfig({ ...REQUIRED, MODELS_DIR: modelsDir }, CWD).translator).toMatchObject({ modelsDir: expected });
   });
 
   it('rejects an unknown translator rather than guessing', () => {
@@ -71,11 +81,18 @@ describe('readConfig', () => {
     expect(config.defaultLanguages.toString()).toBe('zh-TW');
   });
 
-  it.each(['zh-TW', 'ja,vi'])(
-    'rejects %j at startup for the local translator, which translates only into the languages the commands offer',
-    (languages) => {
-      expect(() => readConfig({ ...REQUIRED, DEFAULT_TARGET_LANGUAGE: languages }, CWD)).toThrow(
-        /^DEFAULT_TARGET_LANGUAGE: the local translator does not translate into (zh-TW|vi)\. Use the languages offered in the commands \(ja, en, ko, zh, es, fr, de, it, pt, ru\), or TRANSLATOR=gemini$/
+  it.each([
+    ['claude', 'zh-TW'],
+    ['claude', 'ja,vi'],
+    ['local', 'zh-TW'],
+  ])(
+    'rejects at startup, for TRANSLATOR=%s, %j, which the commands do not offer and Whisper cannot tell',
+    (translator, languages) => {
+      expect(() => readConfig({ ...REQUIRED, TRANSLATOR: translator, DEFAULT_TARGET_LANGUAGE: languages }, CWD)).toThrow(
+        new RegExp(
+          `^DEFAULT_TARGET_LANGUAGE: TRANSLATOR=${translator} does not translate into (zh-TW|vi)\\. ` +
+            'Use the languages offered in the commands \\(ja, en, ko, zh, es, fr, de, it, pt, ru\\), or TRANSLATOR=gemini$'
+        )
       );
     }
   );
