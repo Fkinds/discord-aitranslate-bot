@@ -4,7 +4,7 @@ import { downloadModels } from './infrastructure/local/model-download';
 import { LOCAL_MODEL_FILES } from './infrastructure/local/model-files';
 import { createLogger } from './infrastructure/winston-logger';
 
-/** Download the models the local translator needs into MODELS_DIR, keeping the files already there and intact. */
+/** Download the models for hearing speech on this machine into MODELS_DIR, keeping the files already there and intact. */
 async function downloadLocalModels(): Promise<void> {
   dotenv.config();
   const config = readModelsConfig(process.env, process.cwd());

@@ -6,15 +6,3 @@
 allowBuilds:
   '@discordjs/opus': true # downloads a prebuilt native Opus binding, or compiles it
   protobufjs: false # via @google/genai; its postinstall only warns about how dependents pin it
-  node-llama-cpp: false # its postinstall would build llama.cpp from source; the prebuilt binaries below are used instead
-
-# The GPU builds of llama.cpp for Linux and Windows (CUDA, Vulkan; about 700 MB
-# for Linux alone). The bot runs llama.cpp on the Mac's GPU (Metal) or on the
-# CPU, so only those prebuilt binaries are installed.
-ignoredOptionalDependencies:
-  - '@node-llama-cpp/linux-x64-cuda'
-  - '@node-llama-cpp/linux-x64-cuda-ext'
-  - '@node-llama-cpp/linux-x64-vulkan'
-  - '@node-llama-cpp/win-x64-cuda'
-  - '@node-llama-cpp/win-x64-cuda-ext'
-  - '@node-llama-cpp/win-x64-vulkan'

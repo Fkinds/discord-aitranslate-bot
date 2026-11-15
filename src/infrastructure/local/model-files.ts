@@ -59,26 +59,5 @@ export const WHISPER_MODEL = {
   },
 } as const satisfies Record<string, ModelFile>;
 
-/**
- * Hy-MT2-1.8B (Apache-2.0), which translates between any two of 33 languages,
- * quantized to Q4_K_M by Tencent, who made it.
- * https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
- */
-export const TRANSLATION_MODEL = {
-  model: {
-    path: 'hy-mt2-1.8b/Hy-MT2-1.8B-Q4_K_M.gguf',
-    url: huggingFace('tencent/Hy-MT2-1.8B-GGUF', 'a0c709d9fac510f2c807aa3af52872340dc37a4a', 'Hy-MT2-1.8B-Q4_K_M.gguf'),
-    bytes: 1_133_080_448,
-    sha256: 'dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699',
-  },
-} as const satisfies Record<string, ModelFile>;
-
-/** The files for hearing speech on this machine: the voice detector and Whisper. */
-export const SPEECH_MODEL_FILES: readonly ModelFile[] = Object.freeze([...Object.values(VAD_MODEL), ...Object.values(WHISPER_MODEL)]);
-
-/** Every file the local translator needs: what `pnpm models:download` downloads. */
-export const LOCAL_MODEL_FILES: readonly ModelFile[] = Object.freeze([
-  ...Object.values(VAD_MODEL),
-  ...Object.values(WHISPER_MODEL),
-  ...Object.values(TRANSLATION_MODEL),
-]);
+/** Every file for hearing speech on this machine: what `pnpm models:download` downloads. */
+export const LOCAL_MODEL_FILES: readonly ModelFile[] = Object.freeze([...Object.values(VAD_MODEL), ...Object.values(WHISPER_MODEL)]);

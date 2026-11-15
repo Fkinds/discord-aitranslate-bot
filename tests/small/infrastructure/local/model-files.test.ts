@@ -2,13 +2,12 @@ import { describe, it, expect } from '@jest/globals';
 import { LOCAL_MODEL_FILES } from '../../../../src/infrastructure/local/model-files';
 
 describe('LOCAL_MODEL_FILES', () => {
-  it('lists the voice detector, the speech recognizer and the translation model', () => {
+  it('lists the voice detector and the speech recognizer', () => {
     expect(LOCAL_MODEL_FILES.map((file) => file.path)).toEqual([
       'silero-vad/silero_vad.onnx',
       'whisper-large-v3-turbo/turbo-encoder.int8.onnx',
       'whisper-large-v3-turbo/turbo-decoder.int8.onnx',
       'whisper-large-v3-turbo/turbo-tokens.txt',
-      'hy-mt2-1.8b/Hy-MT2-1.8B-Q4_K_M.gguf',
     ]);
   });
 
