@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { loadConfig } from '@anthropic-ai/sdk/lib/credentials';
 import type { LanguageCode } from '../../domain/language-code';
 import type { Logger } from '../../usecases/ports/logger';
 import { TranslationFailed } from '../../usecases/ports/translator';
@@ -90,6 +91,46 @@ export function translationsFrom(message: Anthropic.Message, into: readonly Lang
   });
 }
 
+/**
+ * What the requests to Claude carry, in as much as the log may say: never a
+ * key or a token.
+ *
+ * - `api-key`: the API key that was given.
+ * - `sign-in`: the tokens `ant auth login` keeps, which the SDK renews.
+ * - `federation`: tokens exchanged for the identity tokens of an identity
+ *   provider (Workload Identity Federation).
+ * - `none`: nothing, so every request fails.
+ */
+export type ClaudeCredentials =
+  | { readonly kind: 'api-key' }
+  | { readonly kind: 'sign-in'; readonly workspaceId: string | null }
+  | { readonly kind: 'federation'; readonly federationRuleId: string; readonly workspaceId: string | null }
+  | { readonly kind: 'none' };
+
+/**
+ * Whether Claude can be called, as a request shows.
+ *
+ * - `granted`: it can.
+ * - `refused`: it cannot, and asking again will not change that: no
+ *   credentials, wrong or expired ones, no permission, or no such model.
+ * - `unreachable`: the API could not be asked, or could not answer now: a
+ *   failed connection, a timeout, 429 or 5xx. It may pass.
+ */
+export type ClaudeAccess =
+  | { readonly kind: 'granted' }
+  | { readonly kind: 'refused'; readonly reason: string }
+  | { readonly kind: 'unreachable'; readonly reason: string };
+
+/** What a failed request to Claude says about whether Claude can be called. */
+export function accessFrom(error: unknown): ClaudeAccess {
+  const reason = describe(error);
+  if (error instanceof Anthropic.APIConnectionError) return { kind: 'unreachable', reason };
+  if (error instanceof Anthropic.APIError && error.status !== undefined && (error.status === 429 || error.status >= 500)) {
+    return { kind: 'unreachable', reason };
+  }
+  return { kind: 'refused', reason };
+}
+
 export interface ClaudeOptions {
   /** Give up on an attempt after this long. */
   readonly timeoutMs: number;
@@ -107,17 +148,60 @@ export interface ClaudeOptions {
 export class ClaudeTextTranslator implements TextTranslator {
   private readonly client: Anthropic;
 
+  /**
+   * @param apiKey The API key, or undefined for the credentials the SDK finds
+   *   itself, in its order: the profile ANTHROPIC_PROFILE names, the Workload
+   *   Identity Federation variables (ANTHROPIC_FEDERATION_RULE_ID and the
+   *   rest), then the profile `ant auth login` made. These are the one setting
+   *   that does not come through readConfig: the SDK owns their order and
+   *   their files, and a copy of it here would drift from it. ANTHROPIC_API_KEY
+   *   and ANTHROPIC_AUTH_TOKEN are kept from the SDK, so that readConfig stays
+   *   the one reader of the API key.
+   */
   constructor(
-    apiKey: string,
+    private readonly apiKey: string | undefined,
     options: ClaudeOptions,
     private readonly logger: Logger
   ) {
     this.client = new Anthropic({
-      apiKey,
+      ...(apiKey === undefined ? { apiKey: null, authToken: null } : { apiKey }),
       timeout: options.timeoutMs,
       maxRetries: options.maxRetries,
       ...(options.baseUrl === undefined ? {} : { baseURL: options.baseUrl }),
     });
+  }
+
+  /**
+   * The credentials the requests will carry. Reads the SDK's settings and
+   * files, but sends nothing.
+   *
+   * @throws Error when ANTHROPIC_PROFILE names a profile that does not exist,
+   *   or a profile is malformed.
+   */
+  async credentials(): Promise<ClaudeCredentials> {
+    if (this.apiKey !== undefined) return { kind: 'api-key' };
+    const config = await loadConfig();
+    if (config === null) return { kind: 'none' };
+    const workspaceId = config.workspace_id ?? null;
+    switch (config.authentication.type) {
+      case 'user_oauth':
+        return { kind: 'sign-in', workspaceId };
+      case 'oidc_federation':
+        return { kind: 'federation', federationRuleId: config.authentication.federation_rule_id, workspaceId };
+    }
+  }
+
+  /**
+   * Whether Claude can be called, by asking once, without trying again, for
+   * the model the translations use. Asking costs nothing.
+   */
+  async checkAccess(): Promise<ClaudeAccess> {
+    try {
+      await this.client.models.retrieve(CLAUDE_MODEL, {}, { maxRetries: 0 });
+      return { kind: 'granted' };
+    } catch (error) {
+      return accessFrom(error);
+    }
   }
 
   async translate(text: string, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
@@ -136,10 +220,17 @@ export class ClaudeTextTranslator implements TextTranslator {
   }
 }
 
+/** What to do when the API does not take the credentials (HTTP 401). */
+export const CREDENTIALS_HINT =
+  'the credentials are wrong or have run out: sign in again with ant auth login, or check ANTHROPIC_API_KEY';
+
 /** What went wrong with a request, in a few words. */
 function describe(error: unknown): string {
   if (error instanceof Anthropic.APIConnectionTimeoutError) return 'the request timed out';
   if (error instanceof Anthropic.APIConnectionError) return 'could not connect to the API';
-  if (error instanceof Anthropic.APIError) return `HTTP ${error.status}${error.type ? ` (${error.type})` : ''}`;
+  if (error instanceof Anthropic.APIError) {
+    const status = `HTTP ${error.status}${error.type ? ` (${error.type})` : ''}`;
+    return error.status === 401 ? `${status}: ${CREDENTIALS_HINT}` : status;
+  }
   return error instanceof Error ? error.message : String(error);
 }
