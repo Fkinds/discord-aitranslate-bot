@@ -35,6 +35,14 @@ describe('HyMtTranslator, with the local model', () => {
     translator = await HyMtTranslator.load(localModelsDir());
   }, LOCAL_MODEL_TIMEOUT_MS);
 
+  /** The text in the one language asked for. */
+  const translateInto = async (text: string, language: LanguageCode) => {
+    const [translation, ...more] = await translator.translate(text, [language]);
+    expect(more).toEqual([]);
+    expect(translation?.language).toBe(language);
+    return translation!.text;
+  };
+
   afterAll(async () => {
     await translator?.close();
   });
@@ -42,8 +50,8 @@ describe('HyMtTranslator, with the local model', () => {
   it(
     'translates Japanese into Korean and English',
     async () => {
-      expect(await translator.translate('私たちは岩田さんの車でいきました。', KO)).toMatch(/차/);
-      expect(await translator.translate('私たちは岩田さんの車でいきました。', EN)).toMatch(/\bcar\b/i);
+      expect(await translateInto('私たちは岩田さんの車でいきました。', KO)).toMatch(/차/);
+      expect(await translateInto('私たちは岩田さんの車でいきました。', EN)).toMatch(/\bcar\b/i);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
@@ -51,7 +59,7 @@ describe('HyMtTranslator, with the local model', () => {
   it(
     'translates casual Korean into Japanese',
     async () => {
-      expect(await translator.translate('어제 친구랑 같이 영화 봤는데 진짜 재밌었어', JA)).toMatch(/映画/);
+      expect(await translateInto('어제 친구랑 같이 영화 봤는데 진짜 재밌었어', JA)).toMatch(/映画/);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
@@ -61,7 +69,7 @@ describe('HyMtTranslator, with the local model', () => {
     async () => {
       const text = 'Shall we meet at the station at seven?';
 
-      expect(await translator.translate(text, JA)).toBe(await translator.translate(text, JA));
+      expect(await translateInto(text, JA)).toBe(await translateInto(text, JA));
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
@@ -69,13 +77,11 @@ describe('HyMtTranslator, with the local model', () => {
   it(
     'translates into every language offered in the commands',
     async () => {
-      const translations: Record<string, string> = {};
-      for (const language of SUPPORTED_LANGUAGES) {
-        translations[language.tag] = await translator.translate("We went in Mr. Iwata's car.", language);
-      }
+      const translations = await translator.translate("We went in Mr. Iwata's car.", SUPPORTED_LANGUAGES);
 
-      for (const [tag, translation] of Object.entries(translations)) {
-        expect([tag, translation]).toEqual([tag, expect.stringMatching(WRITTEN_IN[tag]!)]);
+      expect(translations.map(({ language }) => language)).toEqual(SUPPORTED_LANGUAGES);
+      for (const { language, text } of translations) {
+        expect([language.tag, text]).toEqual([language.tag, expect.stringMatching(WRITTEN_IN[language.tag]!)]);
       }
     },
     LOCAL_MODEL_TIMEOUT_MS
@@ -87,7 +93,7 @@ describe('HyMtTranslator, with the local model', () => {
       const stopped = await HyMtTranslator.load(localModelsDir());
       await stopped.close();
 
-      await expect(stopped.translate('こんにちは', KO)).rejects.toThrow(TranslationFailed);
+      await expect(stopped.translate('こんにちは', [KO])).rejects.toThrow(TranslationFailed);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
@@ -114,8 +120,8 @@ describe('HyMtTranslator, with the local model', () => {
         const { HyMtTranslator } = require('./src/infrastructure/local/hy-mt-translator');
         const { LanguageCode } = require('./src/domain/language-code');
         HyMtTranslator.load(process.argv[1])
-          .then((translator) => translator.translate('こんにちは', LanguageCode.of('ko')))
-          .then((translation) => console.log('translated: ' + translation));
+          .then((translator) => translator.translate('こんにちは', [LanguageCode.of('ko')]))
+          .then(([translation]) => console.log('translated: ' + translation.text));
       `;
       const repository = path.resolve(__dirname, '../../../..');
 

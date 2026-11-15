@@ -2,7 +2,7 @@ import path from 'node:path';
 import { LanguageCode, SUPPORTED_LANGUAGES } from '../domain/language-code';
 import { DomainError } from '../domain/shared/domain-error';
 import { TranslationLanguages } from '../domain/translation-languages';
-import { translatesInto } from './local/hy-mt-translator';
+import { translatesInto } from './local/languages';
 
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
