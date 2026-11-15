@@ -1,9 +1,11 @@
 import { describe, it, expect } from '@jest/globals';
-import type Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { LanguageCode } from '../../../../src/domain/language-code';
 import {
+  accessFrom,
   answerSchemaFor,
   CLAUDE_MODEL,
+  CREDENTIALS_HINT,
   INSTRUCTIONS,
   maxTokensFor,
   requestFor,
@@ -92,5 +94,30 @@ describe('translationsFrom', () => {
   ])('fails when %s', (_case, message, reason) => {
     expect(() => translationsFrom(message, [KO])).toThrow(TranslationFailed);
     expect(() => translationsFrom(message, [KO])).toThrow(reason);
+  });
+});
+
+/** The error the SDK throws for an answer with `status`. */
+const anAnswerOf = (status: number, type: string) =>
+  Anthropic.APIError.generate(status, { type: 'error', error: { type, message: type } }, undefined, new Headers());
+
+describe('accessFrom', () => {
+  it.each([
+    ['a failed connection', new Anthropic.APIConnectionError({}), 'could not connect to the API'],
+    ['a timeout', new Anthropic.APIConnectionTimeoutError(), 'the request timed out'],
+    ['HTTP 429', anAnswerOf(429, 'rate_limit_error'), 'HTTP 429 (rate_limit_error)'],
+    ['HTTP 500', anAnswerOf(500, 'api_error'), 'HTTP 500 (api_error)'],
+    ['HTTP 529', anAnswerOf(529, 'overloaded_error'), 'HTTP 529 (overloaded_error)'],
+  ])('finds Claude unreachable, which may pass, after %s', (_case, error, reason) => {
+    expect(accessFrom(error)).toEqual({ kind: 'unreachable', reason });
+  });
+
+  it.each([
+    ['HTTP 401, with what to do', anAnswerOf(401, 'authentication_error'), `HTTP 401 (authentication_error): ${CREDENTIALS_HINT}`],
+    ['HTTP 403', anAnswerOf(403, 'permission_error'), 'HTTP 403 (permission_error)'],
+    ['HTTP 404', anAnswerOf(404, 'not_found_error'), 'HTTP 404 (not_found_error)'],
+    ['no credentials', new Error('Could not resolve authentication method'), 'Could not resolve authentication method'],
+  ])('finds Claude refused, which asking again will not change, after %s', (_case, error, reason) => {
+    expect(accessFrom(error)).toEqual({ kind: 'refused', reason });
   });
 });
