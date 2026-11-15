@@ -1,7 +1,8 @@
 import type { TranslationLanguages } from '../../domain/translation-languages';
 import type { SpeechAudio } from '../../usecases/ports/speech-audio';
 import { TranslationFailed, type SpeechTranslation, type Translator } from '../../usecases/ports/translator';
-import { HyMtTranslator, type TextTranslator } from './hy-mt-translator';
+import { HyMtTranslator } from './hy-mt-translator';
+import type { TextTranslator } from './text-translator';
 import { spokenLanguageAmong, WhisperRecognizer, type RecognizerOptions, type SpeechRecognizer } from './whisper-recognizer';
 
 /**
@@ -35,10 +36,8 @@ export class LocalTranslator implements Translator {
     if (heard.text === '') return { original: '', spokenLanguage: null, translations: [] };
 
     const spokenLanguage = spokenLanguageAmong(languages, heard.language);
-    const translations = [];
-    for (const language of languages.targetsFor(spokenLanguage)) {
-      translations.push({ language, text: await this.translator.translate(heard.text, language) });
-    }
+    const targets = languages.targetsFor(spokenLanguage);
+    const translations = targets.length === 0 ? [] : await this.translator.translate(heard.text, targets);
     return { original: heard.text, spokenLanguage, translations };
   }
 

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { LanguageCode } from '../../../../src/domain/language-code';
 import { TranslationLanguages } from '../../../../src/domain/translation-languages';
-import type { TextTranslator } from '../../../../src/infrastructure/local/hy-mt-translator';
 import { LocalTranslator } from '../../../../src/infrastructure/local/local-translator';
+import type { TextTranslator, TranslatedText } from '../../../../src/infrastructure/local/text-translator';
 import type { Heard, SpeechRecognizer } from '../../../../src/infrastructure/local/whisper-recognizer';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
@@ -21,14 +21,14 @@ class FakeRecognizer implements SpeechRecognizer {
   }
 }
 
-/** Translates "<text>" into "<text> in <tag>", recording each request, or fails with what it is told to. */
+/** Translates "<text>" into "<text> in <tag>", recording the languages of each request, or fails with what it is told to. */
 class FakeTextTranslator implements TextTranslator {
-  readonly requests: string[] = [];
+  readonly requests: string[][] = [];
   error: Error | undefined;
-  async translate(text: string, into: LanguageCode): Promise<string> {
-    this.requests.push(into.tag);
+  async translate(text: string, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
+    this.requests.push(into.map((language) => language.tag));
     if (this.error) throw this.error;
-    return `${text} in ${into.tag}`;
+    return into.map((language) => ({ language, text: `${text} in ${language.tag}` }));
   }
 }
 
@@ -60,7 +60,7 @@ describe('LocalTranslator', () => {
 
     expect(translation.spokenLanguage).toBeNull();
     expect(translation.translations.map(({ language }) => language)).toEqual([JA, KO]);
-    expect(textTranslator.requests).toEqual(['ja', 'ko']);
+    expect(textTranslator.requests).toEqual([['ja', 'ko']]);
   });
 
   it('translates nothing that was said in the one language of the session', async () => {

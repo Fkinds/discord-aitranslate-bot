@@ -3,38 +3,13 @@ import { once } from 'node:events';
 import path from 'node:path';
 import type { LanguageCode } from '../../domain/language-code';
 import { TranslationFailed } from '../../usecases/ports/translator';
+import { englishNameOf } from './languages';
 import { TRANSLATION_MODEL } from './model-files';
-
-/** Translates text that was said into another language. */
-export interface TextTranslator {
-  /** @throws TranslationFailed when it could not be translated. */
-  translate(text: string, into: LanguageCode): Promise<string>;
-}
-
-/** The English names of the languages offered in the commands, as Hy-MT2's prompts name languages. */
-const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map([
-  ['ja', 'Japanese'],
-  ['en', 'English'],
-  ['ko', 'Korean'],
-  ['zh', 'Chinese'],
-  ['es', 'Spanish'],
-  ['fr', 'French'],
-  ['de', 'German'],
-  ['it', 'Italian'],
-  ['pt', 'Portuguese'],
-  ['ru', 'Russian'],
-]);
-
-/** Whether the local translator translates into the language: it does into those offered in the commands. */
-export function translatesInto(language: LanguageCode): boolean {
-  return LANGUAGE_NAMES.has(language.tag);
-}
+import type { TextTranslator, TranslatedText } from './text-translator';
 
 /** The prompt that Hy-MT2's model card gives for translating, in English. */
 export function promptFor(text: string, into: LanguageCode): string {
-  const name = LANGUAGE_NAMES.get(into.tag);
-  if (name === undefined) throw new RangeError(`The local translator does not translate into ${into.tag}`);
-  return `Translate the following text into ${name}. Note that you should only output the translated result without any additional explanation:\n\n${text}`;
+  return `Translate the following text into ${englishNameOf(into)}. Note that you should only output the translated result without any additional explanation:\n\n${text}`;
 }
 
 /**
@@ -77,7 +52,7 @@ type WorkerMessage =
 /**
  * Translates with Hy-MT2-1.8B, which node-llama-cpp runs in a child process
  * of its own (llama-worker.mjs) on the Mac's GPU or on the CPU. It translates
- * one text at a time, in the order asked.
+ * into one language at a time, in the order asked.
  *
  * A process, not a worker thread: in the process that recognizes speech with
  * onnxruntime, the model wrote garbage now and then on an Intel Xeon 6975P-C
@@ -139,7 +114,13 @@ export class HyMtTranslator implements TextTranslator {
     return new HyMtTranslator(worker, ready.gpu);
   }
 
-  async translate(text: string, into: LanguageCode): Promise<string> {
+  async translate(text: string, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
+    const translations: TranslatedText[] = [];
+    for (const language of into) translations.push({ language, text: await this.translateInto(text, language) });
+    return translations;
+  }
+
+  private async translateInto(text: string, into: LanguageCode): Promise<string> {
     const prompt = promptFor(text, into);
     const tokenLimit = tokenLimitFor(text);
     if (this.stopped !== undefined) throw new TranslationFailed(`The translation model has stopped: ${this.stopped}`);

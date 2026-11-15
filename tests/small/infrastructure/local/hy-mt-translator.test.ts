@@ -1,24 +1,9 @@
 import { describe, it, expect } from '@jest/globals';
-import { LanguageCode, SUPPORTED_LANGUAGES } from '../../../../src/domain/language-code';
-import {
-  promptFor,
-  tokenLimitFor,
-  translatesInto,
-  translationFrom,
-} from '../../../../src/infrastructure/local/hy-mt-translator';
+import { LanguageCode } from '../../../../src/domain/language-code';
+import { promptFor, tokenLimitFor, translationFrom } from '../../../../src/infrastructure/local/hy-mt-translator';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
 
 const KO = LanguageCode.of('ko');
-
-describe('translatesInto', () => {
-  it('translates into every language offered in the commands', () => {
-    expect(SUPPORTED_LANGUAGES.filter((language) => !translatesInto(language))).toEqual([]);
-  });
-
-  it.each(['zh-TW', 'vi', 'ja-JP'])('does not translate into %s, which the commands do not offer', (tag) => {
-    expect(translatesInto(LanguageCode.of(tag))).toBe(false);
-  });
-});
 
 describe('promptFor', () => {
   it("asks for the translation alone, in the words of Hy-MT2's model card", () => {
@@ -26,12 +11,6 @@ describe('promptFor', () => {
       'Translate the following text into Korean. Note that you should only output the translated result without any additional explanation:\n\n' +
         '私たちは岩田さんの車でいきました。'
     );
-  });
-
-  it('names each language offered in the commands in English', () => {
-    const names = SUPPORTED_LANGUAGES.map((language) => promptFor('', language).match(/into (\w+)\./)?.[1]);
-
-    expect(names).toEqual(['Japanese', 'English', 'Korean', 'Chinese', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian']);
   });
 
   it('refuses a language it does not translate into', () => {
