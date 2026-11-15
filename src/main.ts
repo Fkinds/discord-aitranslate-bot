@@ -9,7 +9,7 @@ import { ClaudeTextTranslator } from './infrastructure/claude/claude-text-transl
 import { GeminiTranslator, geminiModel } from './infrastructure/gemini/gemini-translator';
 import { LocalTranslator } from './infrastructure/local/local-translator';
 import { missingModelFiles } from './infrastructure/local/model-download';
-import { SPEECH_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
+import { LOCAL_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
 import { OneAtATime } from './infrastructure/local/one-at-a-time';
 import { WhisperRecognizer } from './infrastructure/local/whisper-recognizer';
 import { PlaceholderTranslator } from './infrastructure/placeholder-translator';
@@ -58,7 +58,7 @@ async function requireModels(files: readonly ModelFile[], modelsDir: string): Pr
 export async function translatorFor(config: TranslatorConfig, logger: Logger, clock: Clock = () => new Date()): Promise<Translator> {
   switch (config.kind) {
     case 'claude': {
-      await requireModels(SPEECH_MODEL_FILES, config.modelsDir);
+      await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
       logger.info('Loading the local models', { modelsDir: config.modelsDir });
       const recognizer = await WhisperRecognizer.load(config.modelsDir, { threads: LOCAL_THREADS });
       logger.info('Loaded the local models');

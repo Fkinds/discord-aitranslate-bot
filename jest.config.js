@@ -9,9 +9,9 @@ const path = require('node:path');
 //   medium  this machine only: servers on localhost, and the local models that
 //           pnpm models:download puts in models/. No other host.
 //
-// The medium tests run one file at a time (--runInBand in package.json): the
-// local models use every CPU core they find, and llama.cpp slows to a crawl
-// when its threads share the cores with another model's.
+// The medium tests run one file at a time (--runInBand in package.json): each
+// file that runs Whisper takes 4 CPU threads and over 2 GB of memory, and side
+// by side they slow each other down on a 4-core CI runner.
 //
 // The first directory under tests/ is the size. Network access is enforced
 // per size by tests/support/network-policy-environment.js.
