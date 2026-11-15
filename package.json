@@ -1,7 +1,7 @@
 {
   "name": "discord-multilingual-translator",
   "version": "1.0.0",
-  "description": "Discord bot that translates voice chat in real time, on the machine it runs on or with Google Gemini, into one language or between a pair of languages",
+  "description": "Discord bot that translates voice chat in real time, hearing it with Whisper and translating with Claude, or with Google Gemini, into one language or between a pair of languages",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
@@ -28,8 +28,8 @@
     "ai-translation",
     "gemini",
     "whisper",
-    "llama-cpp",
-    "offline",
+    "claude",
+    "anthropic",
     "speech-to-text",
     "language-detection",
     "i18n",
