@@ -6,6 +6,9 @@ yarn.lock
 # Build output
 dist/
 build/
+
+# Test coverage (pnpm test:coverage)
+coverage/
 *.js.map
 
 # Local models (pnpm models:download)

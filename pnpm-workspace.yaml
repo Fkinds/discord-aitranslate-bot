@@ -6,3 +6,4 @@
 allowBuilds:
   '@discordjs/opus': true # downloads a prebuilt native Opus binding, or compiles it
   protobufjs: false # via @google/genai; its postinstall only warns about how dependents pin it
+  '@parcel/watcher': false # via jest 30, for watch mode; its prebuilt binary comes as an optional dependency, so nothing needs building
