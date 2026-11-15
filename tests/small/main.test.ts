@@ -8,7 +8,7 @@ import { FakeLogger } from '../support/fakes/fake-logger';
 
 const config = readConfig({ DISCORD_BOT_TOKEN: 'token', DISCORD_CLIENT_ID: '123', TRANSLATOR: 'fake' }, '/srv/bot');
 
-// The local translator loads its models from files: tests/medium/main.test.ts.
+// With TRANSLATOR=claude, Whisper loads its models from files: tests/medium/main.test.ts.
 describe('translatorFor', () => {
   it('translates with Gemini with TRANSLATOR=gemini', async () => {
     await expect(
@@ -27,13 +27,6 @@ describe('startNoticeFor', () => {
       "What is said there is transcribed on the bot's own machine, and the text is sent to Anthropic's Claude to be translated."
     );
   });
-
-  it('says that what is said stays on the machine the bot runs on', () => {
-    expect(startNoticeFor({ kind: 'local', modelsDir: '/srv/bot/models' })).toBe(
-      "What is said there is transcribed and translated on the bot's own machine, and is not sent anywhere else."
-    );
-  });
-
 
   it('says that what is said goes to Google Gemini', () => {
     expect(startNoticeFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' })).toContain('sent to Google Gemini');

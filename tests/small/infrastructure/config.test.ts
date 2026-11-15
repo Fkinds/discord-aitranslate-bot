@@ -58,10 +58,10 @@ describe('readConfig', () => {
     expect(() => readConfig(withoutKey, CWD)).toThrow('Missing required environment variables: ANTHROPIC_API_KEY');
   });
 
-  it.each(['local', 'fake'])('needs no API key with TRANSLATOR=%s', (translator) => {
+  it('needs no API key with TRANSLATOR=fake', () => {
     const { ANTHROPIC_API_KEY: _anthropic, GOOGLE_GEMINI_API_KEY: _gemini, ...withoutKeys } = REQUIRED;
 
-    expect(readConfig({ ...withoutKeys, TRANSLATOR: translator }, CWD).translator.kind).toBe(translator);
+    expect(readConfig({ ...withoutKeys, TRANSLATOR: 'fake' }, CWD).translator).toEqual({ kind: 'fake' });
   });
 
   it.each([
@@ -71,8 +71,13 @@ describe('readConfig', () => {
     expect(readConfig({ ...REQUIRED, MODELS_DIR: modelsDir }, CWD).translator).toMatchObject({ modelsDir: expected });
   });
 
-  it('rejects an unknown translator rather than guessing', () => {
-    expect(() => readConfig({ ...REQUIRED, TRANSLATOR: 'openai' }, CWD)).toThrow(ConfigError);
+  it.each([
+    ['an unknown translator, rather than guessing', 'openai'],
+    ['the local translator, which is gone', 'local'],
+  ])('rejects %s', (_case, translator) => {
+    expect(() => readConfig({ ...REQUIRED, TRANSLATOR: translator }, CWD)).toThrow(
+      new ConfigError(`TRANSLATOR must be one of claude, gemini, fake, got "${translator}"`)
+    );
   });
 
   it('takes any well-formed language tag, in canonical form, for Gemini', () => {
@@ -84,7 +89,6 @@ describe('readConfig', () => {
   it.each([
     ['claude', 'zh-TW'],
     ['claude', 'ja,vi'],
-    ['local', 'zh-TW'],
   ])(
     'rejects at startup, for TRANSLATOR=%s, %j, which the commands do not offer and Whisper cannot tell',
     (translator, languages) => {
