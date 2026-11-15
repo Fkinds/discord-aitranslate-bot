@@ -130,7 +130,7 @@ export function compose(
 }
 
 async function main(): Promise<void> {
-  dotenv.config();
+  dotenv.config({ quiet: true });
   await sodium.ready;
   const config = readConfig(process.env, process.cwd());
   const logger = createLogger(config.logLevel);
