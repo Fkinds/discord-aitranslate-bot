@@ -22,7 +22,7 @@ concurrency:
 jobs:
   small:
     name: small (node ${{ matrix.node }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -47,7 +47,7 @@ jobs:
   medium:
     name: medium (node ${{ matrix.node }})
     needs: [small]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +75,7 @@ jobs:
   # every one of them has to follow Conventional Commits, not only the title.
   commitlint:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,7 +95,7 @@ jobs:
   ci:
     if: always()
     needs: [small, medium, commitlint]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Require every job to succeed (commitlint runs on pull requests only)
         env:
