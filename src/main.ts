@@ -5,7 +5,7 @@ import sodium from 'libsodium-wrappers';
 import { type Config, readConfig, type TranslatorConfig } from './infrastructure/config';
 import { DiscordTranslationPublisher } from './infrastructure/discord/discord-translation-publisher';
 import { DiscordVoice } from './infrastructure/discord/discord-voice';
-import { ClaudeTextTranslator } from './infrastructure/claude/claude-text-translator';
+import { type ClaudeCredentials, ClaudeTextTranslator } from './infrastructure/claude/claude-text-translator';
 import { GeminiTranslator, geminiModel } from './infrastructure/gemini/gemini-translator';
 import { LocalTranslator } from './infrastructure/local/local-translator';
 import { missingModelFiles } from './infrastructure/local/model-download';
@@ -42,27 +42,61 @@ async function requireModels(files: readonly ModelFile[], modelsDir: string): Pr
   }
 }
 
+/** The credentials, for the log: what kind they are, and the IDs that say whose. */
+function credentialsForLog(credentials: Exclude<ClaudeCredentials, { kind: 'none' }>): Record<string, unknown> {
+  const { kind, ...ids } = credentials;
+  return { credentials: kind, ...ids };
+}
+
+/**
+ * Fail unless Claude can be called: when there are no credentials, or the API
+ * refuses them, the model, or access to it, which trying again will not
+ * change. When the API cannot be asked now, warn, and go on: it may pass.
+ */
+export async function requireClaude(claude: ClaudeTextTranslator, logger: Logger): Promise<void> {
+  const credentials = await claude.credentials();
+  if (credentials.kind === 'none') {
+    throw new Error('There are no credentials for Claude. Sign in with ant auth login, or set ANTHROPIC_API_KEY');
+  }
+  logger.info('Calling Claude', credentialsForLog(credentials));
+
+  const access = await claude.checkAccess();
+  switch (access.kind) {
+    case 'granted':
+      logger.info('Claude can be called');
+      return;
+    case 'refused':
+      throw new Error(`Claude cannot be called: ${access.reason}`);
+    case 'unreachable':
+      logger.warn('Could not check that Claude can be called; going on, and translations fail until it can be', {
+        reason: access.reason,
+      });
+  }
+}
+
 /**
  * The translator the settings ask for.
  *
- * With Claude, Whisper loads its models now, so that missing models stop the
- * bot at startup and the first utterance does not wait for them, and the
- * utterances are taken one at a time. Each Claude and Gemini request may take
+ * With Claude, the bot stops at startup when the models are missing or Claude
+ * cannot be called, and Whisper loads its models now, so that the first
+ * utterance does not wait for them; the utterances are taken one at a time. Each Claude and Gemini request may take
  * 15 s. Claude's SDK tries a failure that may pass
  * again, up to 3 attempts in all. A transient Gemini failure is tried again up
  * to 3 attempts in all, 1 s and then 2 s apart, or after the wait Gemini asks
  * for when that is at most 5 s.
  *
- * @throws Error when the local models are missing or cannot be loaded.
+ * @throws Error when the local models are missing or cannot be loaded, or
+ *   Claude cannot be called.
  */
 export async function translatorFor(config: TranslatorConfig, logger: Logger, clock: Clock = () => new Date()): Promise<Translator> {
   switch (config.kind) {
     case 'claude': {
       await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
+      const claude = new ClaudeTextTranslator(config.apiKey, { timeoutMs: 15_000, maxRetries: 2 }, logger);
+      await requireClaude(claude, logger);
       logger.info('Loading the local models', { modelsDir: config.modelsDir });
       const recognizer = await WhisperRecognizer.load(config.modelsDir, { threads: LOCAL_THREADS });
       logger.info('Loaded the local models');
-      const claude = new ClaudeTextTranslator(config.apiKey, { timeoutMs: 15_000, maxRetries: 2 }, logger);
       return new OneAtATime(new LocalTranslator(recognizer, claude), clock, logger);
     }
     case 'gemini':

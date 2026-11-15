@@ -44,18 +44,19 @@ describe('readConfig', () => {
   });
 
   it.each([
-    ['claude', 'ANTHROPIC_API_KEY'],
-    ['gemini', 'GOOGLE_GEMINI_API_KEY'],
+    ['claude', ''],
+    ['gemini', ', GOOGLE_GEMINI_API_KEY'],
   ])('names every missing variable at once, with the API key TRANSLATOR=%s needs', (translator, apiKey) => {
     expect(() => readConfig({ TRANSLATOR: translator }, CWD)).toThrow(
-      new ConfigError(`Missing required environment variables: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, ${apiKey}`)
+      new ConfigError(`Missing required environment variables: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID${apiKey}`)
     );
   });
 
-  it('needs the Anthropic API key by default', () => {
+  it('leaves Claude to the credentials its SDK finds when there is no Anthropic API key', () => {
     const { ANTHROPIC_API_KEY: _key, ...withoutKey } = REQUIRED;
 
-    expect(() => readConfig(withoutKey, CWD)).toThrow('Missing required environment variables: ANTHROPIC_API_KEY');
+    expect(readConfig(withoutKey, CWD).translator).toEqual({ kind: 'claude', apiKey: undefined, modelsDir: '/srv/bot/models' });
+    expect(readConfig({ ...withoutKey, ANTHROPIC_API_KEY: '' }, CWD).translator).toMatchObject({ apiKey: undefined });
   });
 
   it('needs no API key with TRANSLATOR=fake', () => {

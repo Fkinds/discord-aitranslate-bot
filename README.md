@@ -61,7 +61,7 @@ With Claude (the default), the bot translates into these 10 only, which Whisper 
 - pnpm 12. The exact version is pinned in `package.json` (`packageManager`).
 - A Discord application with a bot
 - For Claude (the default):
-  - An Anthropic API key
+  - An Anthropic account with API credits, to sign in to with `ant auth login`, or an Anthropic API key
   - 1.0 GB of disk for the speech models, and about 3.5 GB of free memory while the bot runs (measured on a Mac). Whisper runs on the CPU. It is tried on macOS with Apple silicon, and in CI on Linux x64.
 - A Google Gemini API key, only with `TRANSLATOR=gemini`
 
@@ -89,9 +89,9 @@ cp .env.example .env
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
 DISCORD_CLIENT_ID=your_discord_client_id_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
 DEFAULT_TARGET_LANGUAGE=ja
 ```
+For Claude, sign in to Anthropic, or add an API key: see [Anthropic: Sign In, or an API Key](#anthropic-sign-in-or-an-api-key).
 
 5. Download the speech models (1.0 GB), once:
 ```bash
@@ -123,14 +123,24 @@ The permissions are only those the bot uses:
 
 The bot never plays audio, so it does not need Speak.
 
-### Anthropic API Key
+### Anthropic: Sign In, or an API Key
 
-For Claude, the default translator.
+For Claude, the default translator. The bot calls Claude with `ANTHROPIC_API_KEY` when it is set, and otherwise with what the Anthropic SDK finds: a sign-in, or Workload Identity Federation.
 
-1. Sign in to the [Claude Console](https://platform.claude.com)
-2. Create an API key: `ANTHROPIC_API_KEY`
+**Sign in, with no API key**, on the machine the bot runs on:
+1. Install the Anthropic CLI: `brew install anthropics/tap/ant` on macOS; for other systems, see the [CLI quickstart](https://platform.claude.com/docs/en/cli-sdks-libraries/cli/quickstart)
+2. Run `ant auth login`, and approve in the browser tab it opens. Pick the organization and the workspace the bot should use.
+3. `ant auth status` shows who is signed in.
 
-New accounts get free credits to try the API; after that, the API is paid for by use. Claude Haiku 5.5 costs $0.10 per million input tokens and $0.50 per million output tokens ([pricing](https://platform.claude.com/docs/en/about-claude/pricing)). One utterance takes a few hundred tokens, so 1,000 utterances come to about $0.05 (an estimate). With `LOG_LEVEL=debug`, the bot logs the tokens each translation took.
+The sign-in keeps its tokens in `~/.config/anthropic/`, readable only by you, and the SDK renews them. It runs out some weeks after you sign in, however much it is used; sign in again then. Signing in is meant for your own machine.
+
+**Or an API key**: create one on the [API keys](https://platform.claude.com/settings/keys) page of the Claude Console, and set `ANTHROPIC_API_KEY`. You can give it an expiry as you create it. While the key is set, the bot uses the key, not the sign-in.
+
+**On a server, in CI or in a container**: use [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation). The identity tokens (OIDC) the platform gives the bot are exchanged for tokens that last minutes, so no key is kept there. Set the variables it describes, such as `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` and `ANTHROPIC_IDENTITY_TOKEN_FILE`, and leave `ANTHROPIC_API_KEY` unset. Where to run the bot always on is open: [#69](https://github.com/Fkinds/discord-aitranslate-bot/issues/69).
+
+At startup, the bot logs which of these it calls Claude with, never the key or a token, and asks the API whether it can call Claude Haiku 5.5, which costs nothing. It stops when there are no credentials, or the API refuses them; when the API cannot be reached, it warns and goes on.
+
+A Claude Pro or Max plan does not include the API. New accounts get free credits to try the API; after that, the API is paid for by use. Claude Haiku 5.5 costs $0.10 per million input tokens and $0.50 per million output tokens ([pricing](https://platform.claude.com/docs/en/about-claude/pricing)). One utterance takes a few hundred tokens, so 1,000 utterances come to about $0.05 (an estimate). With `LOG_LEVEL=debug`, the bot logs the tokens each translation took.
 
 > **Privacy**: Only the text Whisper heard is sent to Anthropic, never the voices. Anthropic never uses it to train models without your express permission ([API and data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention)).
 
@@ -252,14 +262,14 @@ All configuration is done through environment variables, read from `.env`:
 | `DISCORD_BOT_TOKEN` | Discord bot token | Required |
 | `DISCORD_CLIENT_ID` | Discord application ID | Required |
 | `TRANSLATOR` | `claude` to transcribe on this machine and translate with Claude, `gemini` to do both with Google Gemini, or `fake` to post placeholders and send nothing anywhere | `claude` |
-| `ANTHROPIC_API_KEY` | Anthropic API key | Required with `TRANSLATOR=claude` |
+| `ANTHROPIC_API_KEY` | Anthropic API key. Without it, the bot calls Claude with [a sign-in, or Workload Identity Federation](#anthropic-sign-in-or-an-api-key), which the Anthropic SDK finds through variables of its own, such as `ANTHROPIC_PROFILE` | None |
 | `MODELS_DIR` | Where `pnpm models:download` puts the speech models, and the bot finds them; a relative path is taken from the working directory | `models` |
 | `GOOGLE_GEMINI_API_KEY` | Gemini API key | Required with `TRANSLATOR=gemini` |
 | `GEMINI_MODEL` | Gemini model to use; it must take audio | `gemini-3.8-flash` |
 | `DEFAULT_TARGET_LANGUAGE` | A language tag, or two separated by a comma for a pair, such as `ja,ko`; with `TRANSLATOR=claude`, one of the [10 offered](#-supported-languages) | `ja` |
 | `LOG_LEVEL` | `error`, `warn`, `info` or `debug` | `info` |
 
-An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing speech models.
+An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing speech models, and credentials Claude cannot be called with.
 
 ## 🎬 How It Works
 
@@ -321,6 +331,13 @@ The speech models for Whisper are not in `MODELS_DIR`:
 - If they are somewhere else, set `MODELS_DIR` to that directory
 - Or translate with Gemini: `TRANSLATOR=gemini`, with `GOOGLE_GEMINI_API_KEY`
 
+### The bot stops at startup, saying Claude cannot be called
+- `There are no credentials for Claude`: sign in with `ant auth login`, or set `ANTHROPIC_API_KEY`
+- `HTTP 401`: the credentials are wrong or have run out. Sign in again with `ant auth login`, or check `ANTHROPIC_API_KEY`
+- `HTTP 403`: the credentials may not call the API in that workspace
+- `HTTP 404`: Claude Haiku 5.5 is not available to the organization
+- `ANTHROPIC_PROFILE names the profile ...`: set `ANTHROPIC_PROFILE` to a profile `ant auth login` made, or unset it
+
 ### Commands do not appear or do not respond
 - Register them: `pnpm deploy-commands`, again after an update that changes them
 - Check that the bot was invited with the `applications.commands` scope
@@ -333,7 +350,7 @@ The speech models for Whisper are not in `MODELS_DIR`:
 ### Nothing is translated
 - Check that the bot can connect to the voice channel and post in the text channel
 - Look for `User started speaking` in the log: it shows that the bot hears speech. `LOG_LEVEL=debug` logs more, such as the states of the voice connection
-- Look for `Failed to translate an utterance` in the log, and its reason. `HTTP 401` means a wrong `ANTHROPIC_API_KEY`; `HTTP 402` or a billing error, that the credits have run out; `HTTP 429`, a rate limit
+- Look for `Failed to translate an utterance` in the log, and its reason. `HTTP 401` means wrong credentials, or a sign-in that has run out; `HTTP 402` or a billing error, that the credits have run out; `HTTP 429`, a rate limit
 - With `TRANSLATOR=gemini`: check `GOOGLE_GEMINI_API_KEY`, and that `GEMINI_MODEL` names a model that takes audio. HTTP 429 errors mean a rate limit; the free tier's limits are on [AI Studio](https://aistudio.google.com/rate-limit)
 - To check everything but the translator, run with `TRANSLATOR=fake`
 

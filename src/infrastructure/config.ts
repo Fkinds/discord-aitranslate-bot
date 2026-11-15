@@ -8,7 +8,8 @@ export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type TranslatorConfig =
-  | { readonly kind: 'claude'; readonly apiKey: string; readonly modelsDir: string }
+  /** Without an API key, the SDK finds the credentials: a sign-in with `ant auth login`, or Workload Identity Federation. */
+  | { readonly kind: 'claude'; readonly apiKey: string | undefined; readonly modelsDir: string }
   | { readonly kind: 'gemini'; readonly apiKey: string; readonly model: string }
   | { readonly kind: 'fake' };
 
@@ -49,9 +50,12 @@ function isTranslatorKind(value: string): value is TranslatorKind {
   return (TRANSLATORS as readonly string[]).includes(value);
 }
 
-/** The variable that holds the API key each translator needs, if it needs one. */
+/**
+ * The variable that holds the API key each translator needs, if it needs one.
+ * Claude needs none: without ANTHROPIC_API_KEY, its SDK finds other credentials.
+ */
 const API_KEYS: Readonly<Record<TranslatorKind, string | undefined>> = {
-  claude: 'ANTHROPIC_API_KEY',
+  claude: undefined,
   gemini: 'GOOGLE_GEMINI_API_KEY',
   fake: undefined,
 };
@@ -103,7 +107,7 @@ function translatorFrom(
 ): TranslatorConfig {
   switch (kind) {
     case 'claude':
-      return { kind, apiKey: value('ANTHROPIC_API_KEY')!, modelsDir: modelsDirFrom(value, workingDir) };
+      return { kind, apiKey: value('ANTHROPIC_API_KEY'), modelsDir: modelsDirFrom(value, workingDir) };
     case 'gemini':
       return { kind, apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL };
     case 'fake':
