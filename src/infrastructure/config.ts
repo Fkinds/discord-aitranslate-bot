@@ -9,7 +9,6 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type TranslatorConfig =
   | { readonly kind: 'claude'; readonly apiKey: string; readonly modelsDir: string }
-  | { readonly kind: 'local'; readonly modelsDir: string }
   | { readonly kind: 'gemini'; readonly apiKey: string; readonly model: string }
   | { readonly kind: 'fake' };
 
@@ -44,7 +43,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 type TranslatorKind = TranslatorConfig['kind'];
 
 /** The values of TRANSLATOR; the first is the default. */
-const TRANSLATORS: readonly TranslatorKind[] = ['claude', 'local', 'gemini', 'fake'];
+const TRANSLATORS: readonly TranslatorKind[] = ['claude', 'gemini', 'fake'];
 
 function isTranslatorKind(value: string): value is TranslatorKind {
   return (TRANSLATORS as readonly string[]).includes(value);
@@ -53,7 +52,6 @@ function isTranslatorKind(value: string): value is TranslatorKind {
 /** The variable that holds the API key each translator needs, if it needs one. */
 const API_KEYS: Readonly<Record<TranslatorKind, string | undefined>> = {
   claude: 'ANTHROPIC_API_KEY',
-  local: undefined,
   gemini: 'GOOGLE_GEMINI_API_KEY',
   fake: undefined,
 };
@@ -82,7 +80,7 @@ export function readConfig(env: Env, workingDir: string): Config {
 
   const defaultLanguages = languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja');
   const untranslatable = defaultLanguages.languages.filter((language) => !translatesInto(language));
-  if ((kind === 'claude' || kind === 'local') && untranslatable.length > 0) {
+  if (kind === 'claude' && untranslatable.length > 0) {
     throw new ConfigError(
       `DEFAULT_TARGET_LANGUAGE: TRANSLATOR=${kind} does not translate into ${untranslatable.join(', ')}. ` +
         `Use the languages offered in the commands (${SUPPORTED_LANGUAGES.join(', ')}), or TRANSLATOR=gemini`
@@ -106,8 +104,6 @@ function translatorFrom(
   switch (kind) {
     case 'claude':
       return { kind, apiKey: value('ANTHROPIC_API_KEY')!, modelsDir: modelsDirFrom(value, workingDir) };
-    case 'local':
-      return { kind, modelsDir: modelsDirFrom(value, workingDir) };
     case 'gemini':
       return { kind, apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL };
     case 'fake':

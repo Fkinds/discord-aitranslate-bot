@@ -9,7 +9,7 @@ import { ClaudeTextTranslator } from './infrastructure/claude/claude-text-transl
 import { GeminiTranslator, geminiModel } from './infrastructure/gemini/gemini-translator';
 import { LocalTranslator } from './infrastructure/local/local-translator';
 import { missingModelFiles } from './infrastructure/local/model-download';
-import { LOCAL_MODEL_FILES, SPEECH_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
+import { SPEECH_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
 import { OneAtATime } from './infrastructure/local/one-at-a-time';
 import { WhisperRecognizer } from './infrastructure/local/whisper-recognizer';
 import { PlaceholderTranslator } from './infrastructure/placeholder-translator';
@@ -45,10 +45,10 @@ async function requireModels(files: readonly ModelFile[], modelsDir: string): Pr
 /**
  * The translator the settings ask for.
  *
- * Whisper, for Claude and for the local translator, loads its models now, so
- * that missing models stop the bot at startup and the first utterance does
- * not wait for them; both take the utterances one at a time. Each Claude and
- * Gemini request may take 15 s. Claude's SDK tries a failure that may pass
+ * With Claude, Whisper loads its models now, so that missing models stop the
+ * bot at startup and the first utterance does not wait for them, and the
+ * utterances are taken one at a time. Each Claude and Gemini request may take
+ * 15 s. Claude's SDK tries a failure that may pass
  * again, up to 3 attempts in all. A transient Gemini failure is tried again up
  * to 3 attempts in all, 1 s and then 2 s apart, or after the wait Gemini asks
  * for when that is at most 5 s.
@@ -64,13 +64,6 @@ export async function translatorFor(config: TranslatorConfig, logger: Logger, cl
       logger.info('Loaded the local models');
       const claude = new ClaudeTextTranslator(config.apiKey, { timeoutMs: 15_000, maxRetries: 2 }, logger);
       return new OneAtATime(new LocalTranslator(recognizer, claude), clock, logger);
-    }
-    case 'local': {
-      await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
-      logger.info('Loading the local models', { modelsDir: config.modelsDir });
-      const translator = await LocalTranslator.load(config.modelsDir, { threads: LOCAL_THREADS });
-      logger.info('Loaded the local models');
-      return new OneAtATime(translator, clock, logger);
     }
     case 'gemini':
       return new GeminiTranslator(
@@ -88,8 +81,6 @@ export function startNoticeFor(config: TranslatorConfig): string {
   switch (config.kind) {
     case 'claude':
       return "What is said there is transcribed on the bot's own machine, and the text is sent to Anthropic's Claude to be translated.";
-    case 'local':
-      return "What is said there is transcribed and translated on the bot's own machine, and is not sent anywhere else.";
     case 'gemini':
       return 'What is said there is sent to Google Gemini to be translated.';
     case 'fake':
