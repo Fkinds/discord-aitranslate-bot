@@ -4,7 +4,7 @@
 
 **Break language barriers in real time with AI-powered voice translation**
 
-A Discord bot that listens in a voice channel and posts what is said there, transcribed and translated, to a text channel. By default it does the work on the machine it runs on, free of charge and sending the voices nowhere; it can use Google Gemini instead. Translate everything into one language, or between a pair of languages, such as Japanese ⇄ Korean, both ways.
+A Discord bot that listens in a voice channel and posts what is said there, transcribed and translated, to a text channel. By default it transcribes on the machine it runs on, with Whisper, and has Claude Haiku 5.5 translate the text, for a few cents a month; it can use Google Gemini instead. Translate everything into one language, or between a pair of languages, such as Japanese ⇄ Korean, both ways.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22.12+-green.svg)](https://nodejs.org/)
@@ -18,13 +18,14 @@ A Discord bot that listens in a voice channel and posts what is said there, tran
 ## ✨ Features
 
 - 🎙️ **Voice translation**: Each utterance in the voice channel is transcribed and translated once the speaker pauses for 300 ms
-- 🏠 **On your own machine**: By default, Whisper transcribes and Hy-MT2 translates on the machine the bot runs on: no API key, no fees, and the voices go nowhere else
+- 👂 **Hears on your own machine**: By default, Whisper transcribes on the machine the bot runs on, so the voices go nowhere else
+- 🌐 **Translated by Claude**: Claude Haiku 5.5 translates the text into every language to post in one request, keeping names and the speaker's tone
 - ☁️ **Or with Gemini**: `TRANSLATOR=gemini` sends each utterance to Google Gemini instead, which takes any language
 - 🔁 **Language pairs**: Translate between two languages both ways: what is said in one is translated into the other, and anything else into both
 - 🔍 **Automatic language detection**: The bot tells which language was spoken, so nobody has to set the language they speak
 - 💬 **What was said, and its translation**: Each post shows what was said under the speaker's name, with its translations quoted below
 - 📣 **Open about where speech goes**: When translation starts, everyone in the text channel is told where what is said goes
-- 🧪 **Try it without the models**: `TRANSLATOR=fake` posts placeholders instead of translations and sends nothing anywhere
+- 🧪 **Try it without the models or a key**: `TRANSLATOR=fake` posts placeholders instead of translations and sends nothing anywhere
 - 📊 **Status at a glance**: `/translate-status` shows the languages, how long translation has run, and how many are speaking
 
 ## 🌍 Supported Languages
@@ -44,7 +45,7 @@ The slash commands offer these 10 languages:
 | Portuguese | Português | `pt` |
 | Russian | Русский | `ru` |
 
-The local translator (the default) translates into these 10 only. With `TRANSLATOR=gemini`, `DEFAULT_TARGET_LANGUAGE` also takes any other well-formed [BCP 47](https://www.rfc-editor.org/info/bcp47) language tag, such as `zh-TW` or `vi`. The tag is passed to Gemini as it is, so how well another language works depends on Gemini. Tags are checked and put in canonical form with `Intl.getCanonicalLocales` (ECMA-402): `ZH-tw` becomes `zh-TW`, and a malformed tag such as `ja_JP` stops the bot at startup.
+With Claude (the default), the bot translates into these 10 only, which Whisper tells apart by their tags. With `TRANSLATOR=gemini`, `DEFAULT_TARGET_LANGUAGE` also takes any other well-formed [BCP 47](https://www.rfc-editor.org/info/bcp47) language tag, such as `zh-TW` or `vi`. The tag is passed to Gemini as it is, so how well another language works depends on Gemini. Tags are checked and put in canonical form with `Intl.getCanonicalLocales` (ECMA-402): `ZH-tw` becomes `zh-TW`, and a malformed tag such as `ja_JP` stops the bot at startup.
 
 ## 🎯 Use Cases
 
@@ -59,7 +60,9 @@ The local translator (the default) translates into these 10 only. With `TRANSLAT
 - Node.js 22.12 or later, which `@discordjs/voice` requires. CI runs on Node 22, 24 and 26.
 - pnpm 12. The exact version is pinned in `package.json` (`packageManager`).
 - A Discord application with a bot
-- For the local translator (the default): 2.2 GB of disk for the models, and about 4.5 GB of free memory while the bot runs (measured on a Mac: 3.5 GB at most for the bot, and 1 GB for the translation model's process). On a Mac with Apple silicon, the translation model runs on the GPU; elsewhere both models run on the CPU. It is tried on macOS with Apple silicon, and in CI on Linux x64.
+- For Claude (the default):
+  - An Anthropic API key
+  - 1.0 GB of disk for the speech models, and about 3.5 GB of free memory while the bot runs (measured on a Mac). Whisper runs on the CPU. It is tried on macOS with Apple silicon, and in CI on Linux x64.
 - A Google Gemini API key, only with `TRANSLATOR=gemini`
 
 ## Installation
@@ -86,10 +89,11 @@ cp .env.example .env
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
 DISCORD_CLIENT_ID=your_discord_client_id_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 DEFAULT_TARGET_LANGUAGE=ja
 ```
 
-5. Download the local models (2.2 GB), once:
+5. Download the speech models (1.0 GB), once:
 ```bash
 pnpm models:download
 ```
@@ -118,6 +122,17 @@ The permissions are only those the bot uses:
 - Connect, to join the voice channel
 
 The bot never plays audio, so it does not need Speak.
+
+### Anthropic API Key
+
+For Claude, the default translator.
+
+1. Sign in to the [Claude Console](https://platform.claude.com)
+2. Create an API key: `ANTHROPIC_API_KEY`
+
+New accounts get free credits to try the API; after that, the API is paid for by use. Claude Haiku 5.5 costs $0.10 per million input tokens and $0.50 per million output tokens ([pricing](https://platform.claude.com/docs/en/about-claude/pricing)). One utterance takes a few hundred tokens, so 1,000 utterances come to about $0.05 (an estimate). With `LOG_LEVEL=debug`, the bot logs the tokens each translation took.
+
+> **Privacy**: Only the text Whisper heard is sent to Anthropic, never the voices. Anthropic never uses it to train models without your express permission ([API and data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention)).
 
 ### Google Gemini API Key
 
@@ -185,7 +200,7 @@ Join your voice channel and start translating what is said there into the channe
 
 With neither, the bot uses `DEFAULT_TARGET_LANGUAGE`. With only `second-language`, it pairs it with the first language of `DEFAULT_TARGET_LANGUAGE`.
 
-When translation starts, the bot tells everyone in the text channel where what is said in the voice channel goes: that it is transcribed and translated on the bot's own machine and sent nowhere else, that it is sent to Google Gemini (`TRANSLATOR=gemini`), or that it is sent nowhere (`TRANSLATOR=fake`).
+When translation starts, the bot tells everyone in the text channel where what is said in the voice channel goes: that it is transcribed on the bot's own machine and the text is sent to Anthropic's Claude to be translated, that it is sent to Google Gemini (`TRANSLATOR=gemini`), or that it is sent nowhere (`TRANSLATOR=fake`).
 
 Examples:
 ```
@@ -236,14 +251,15 @@ All configuration is done through environment variables, read from `.env`:
 |----------|-------------|---------|
 | `DISCORD_BOT_TOKEN` | Discord bot token | Required |
 | `DISCORD_CLIENT_ID` | Discord application ID | Required |
-| `TRANSLATOR` | `local` to translate on this machine, `gemini` to translate with Google Gemini, or `fake` to post placeholders and send nothing anywhere | `local` |
-| `MODELS_DIR` | Where `pnpm models:download` puts the local models, and the bot finds them; a relative path is taken from the working directory | `models` |
+| `TRANSLATOR` | `claude` to transcribe on this machine and translate with Claude, `gemini` to do both with Google Gemini, or `fake` to post placeholders and send nothing anywhere | `claude` |
+| `ANTHROPIC_API_KEY` | Anthropic API key | Required with `TRANSLATOR=claude` |
+| `MODELS_DIR` | Where `pnpm models:download` puts the speech models, and the bot finds them; a relative path is taken from the working directory | `models` |
 | `GOOGLE_GEMINI_API_KEY` | Gemini API key | Required with `TRANSLATOR=gemini` |
 | `GEMINI_MODEL` | Gemini model to use; it must take audio | `gemini-3.8-flash` |
-| `DEFAULT_TARGET_LANGUAGE` | A language tag, or two separated by a comma for a pair, such as `ja,ko`; with `TRANSLATOR=local`, one of the [10 offered](#-supported-languages) | `ja` |
+| `DEFAULT_TARGET_LANGUAGE` | A language tag, or two separated by a comma for a pair, such as `ja,ko`; with `TRANSLATOR=claude`, one of the [10 offered](#-supported-languages) | `ja` |
 | `LOG_LEVEL` | `error`, `warn`, `info` or `debug` | `info` |
 
-An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing local models.
+An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing speech models.
 
 ## 🎬 How It Works
 
@@ -253,7 +269,7 @@ graph LR
     B --> C[Decoded and converted to 16 kHz mono]
     C --> D[Silero VAD: the stretches of speech]
     D --> E[Whisper: what was said, and in which language]
-    E --> F[Hy-MT2: translated into each language to post]
+    E --> F[Claude: translated into each language to post]
     F --> G[Posted to the text channel]
 ```
 
@@ -262,12 +278,12 @@ graph LR
 3. 🎵 **Convert**: The Opus audio is decoded and converted to 16 kHz mono.
 4. 🔇 **Find the speech**: Silero VAD finds the stretches of speech. Silence and noise, in which Whisper is known to hear words nobody said, are left out; an utterance with no speech is not posted.
 5. 👂 **Transcribe**: Whisper large-v3-turbo writes down what was said in each stretch, and tells the language: one of the session's, or another.
-6. 🌐 **Translate**: Hy-MT2-1.8B translates what was said into each language that is to be posted (see [What Gets Posted](#what-gets-posted)), and into no other.
+6. 🌐 **Translate**: The bot sends the text to Claude Haiku 5.5, which translates it into each language that is to be posted (see [What Gets Posted](#what-gets-posted)), and into no other, in one request. A JSON Schema fixes the form of its answer (structured output). Claude is told that the text is only something to translate, so instructions said in the voice channel are translated, not followed.
 7. 💬 **Post**: The bot posts what was said and its translations.
 
-The bot works on one utterance at a time, in the order they came; one that waited for others logs how long it waited. On a Mac with an M4 Pro, a 3-second utterance takes about 1.1 seconds, translated into one language or two.
+The bot works on one utterance at a time, in the order they came; one that waited for others logs how long it waited. On a Mac with an M4 Pro, Whisper takes about 1 second to hear a 3-second utterance; the request to Claude comes on top.
 
-### The Local Models
+### The Speech Models
 
 `pnpm models:download` downloads them, at the versions listed in `src/infrastructure/local/model-files.ts`:
 
@@ -275,14 +291,14 @@ The bot works on one utterance at a time, in the order they came; one that waite
 |-------|--------------|---------|------|
 | [Silero VAD](https://github.com/snakers4/silero-vad) v6.2.3 | Tells speech from silence and noise | MIT | 2.3 MB |
 | [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo), int8 for [sherpa-onnx](https://huggingface.co/csukuangfj/sherpa-onnx-whisper-turbo) | Transcribes, and tells the language | MIT | 1.0 GB |
-| [Hy-MT2-1.8B](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF), Q4_K_M | Translates | Apache-2.0 | 1.1 GB |
 
-[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) runs Silero VAD and Whisper on the CPU. [node-llama-cpp](https://github.com/withcatai/node-llama-cpp) runs Hy-MT2 on the Mac's GPU, or on the CPU elsewhere, in a process of its own: in the same process as onnxruntime, it wrote garbage now and then on some Intel Xeon CPUs.
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) runs Silero VAD and Whisper on the CPU. Running them always free and always on, without this machine, is open: [#69](https://github.com/Fkinds/discord-aitranslate-bot/issues/69).
 
-### When the Local Translator Fails
+### When Claude Fails
 
-- Hy-MT2 always picks the likeliest word, so the same text always gets the same translation, and trying again would change nothing: a failure is not tried again.
-- A translation that runs on to its limit, twice as many tokens as what was said has characters and 32 more, or that comes out empty, is a failure.
+- Each request may take 15 seconds.
+- The Anthropic SDK tries a failure that may pass again, up to 3 attempts in all, waiting as long as the API asks: a failed connection, a timeout, or HTTP 408, 409, 429 or 5xx.
+- Any other failure is given up on at once, and so is an answer Claude declined, one that runs on to its limit (4 tokens a character of what was said for each language, and 256 more), or one in another form than asked for.
 - Nothing is posted for an utterance that could not be translated; the failure is logged.
 
 ### With Gemini
@@ -300,6 +316,7 @@ With `TRANSLATOR=gemini`, the converted audio is wrapped in a WAVE file and sent
 ## Troubleshooting
 
 ### The bot stops at startup, saying the local models are missing
+The speech models for Whisper are not in `MODELS_DIR`:
 - Download them: `pnpm models:download`
 - If they are somewhere else, set `MODELS_DIR` to that directory
 - Or translate with Gemini: `TRANSLATOR=gemini`, with `GOOGLE_GEMINI_API_KEY`
@@ -316,6 +333,7 @@ With `TRANSLATOR=gemini`, the converted audio is wrapped in a WAVE file and sent
 ### Nothing is translated
 - Check that the bot can connect to the voice channel and post in the text channel
 - Look for `User started speaking` in the log: it shows that the bot hears speech. `LOG_LEVEL=debug` logs more, such as the states of the voice connection
+- Look for `Failed to translate an utterance` in the log, and its reason. `HTTP 401` means a wrong `ANTHROPIC_API_KEY`; `HTTP 402` or a billing error, that the credits have run out; `HTTP 429`, a rate limit
 - With `TRANSLATOR=gemini`: check `GOOGLE_GEMINI_API_KEY`, and that `GEMINI_MODEL` names a model that takes audio. HTTP 429 errors mean a rate limit; the free tier's limits are on [AI Studio](https://aistudio.google.com/rate-limit)
 - To check everything but the translator, run with `TRANSLATOR=fake`
 
@@ -326,7 +344,7 @@ With `TRANSLATOR=gemini`, the converted audio is wrapped in a WAVE file and sent
 | Command | What it does |
 |---------|--------------|
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
-| `pnpm models:download` | Download the local models into `MODELS_DIR`, and check them |
+| `pnpm models:download` | Download the speech models into `MODELS_DIR`, and check them |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
 | `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download` first |
 | `pnpm test:watch` | Run the small tests again on every change |
@@ -340,9 +358,9 @@ Tests are sorted by what they depend on, not by how long they take:
 | Size | May use | Where | Run |
 |------|---------|-------|-----|
 | Small | The process only: no network, not even localhost | `tests/small/` | Before every commit, and in CI |
-| Medium | This machine only: servers on localhost, such as stand-ins for the Gemini and Discord APIs, and the local models | `tests/medium/` | In CI, after the small tests pass |
+| Medium | This machine only: servers on localhost, such as stand-ins for the Claude, Gemini and Discord APIs, and the speech models | `tests/medium/` | In CI, after the small tests pass |
 
-The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. No test calls the real Gemini API: the medium tests run the Gemini adapter against a stand-in on localhost.
+The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. No test calls the real Claude or Gemini API: the medium tests run their adapters against stand-ins on localhost.
 
 ### Dependency Updates
 
@@ -364,13 +382,14 @@ src/
 │   └── ports/           # What the use cases need from outside: translator, voice, publisher, logger
 ├── infrastructure/      # The ports' implementations, the settings and the logger
 │   ├── discord/         # Joining voice channels, receiving speech, posting
-│   ├── local/           # Transcribing and translating on this machine, and downloading the models
+│   ├── claude/          # Translating with Claude
+│   ├── local/           # Hearing speech on this machine, and downloading the models
 │   └── gemini/          # Translating with Gemini
 ├── interfaces/          # Slash commands and voice events in, use cases, Discord answers out
 │   └── discord/
 ├── main.ts              # Builds the bot and wires it to Discord
 ├── deploy-commands.ts   # Registers the slash commands
-└── download-models.ts   # Downloads the local models
+└── download-models.ts   # Downloads the speech models
 
 tests/
 ├── small/               # Laid out like src/
@@ -413,7 +432,7 @@ MIT License - see LICENSE file for details
 
 - Built with [discord.js](https://discord.js.org/) and [@discordjs/voice](https://github.com/discordjs/discord.js/tree/main/packages/voice)
 - Local transcription with [Whisper](https://github.com/openai/whisper) and [Silero VAD](https://github.com/snakers4/silero-vad), through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
-- Local translation with [Hy-MT2](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF) by Tencent, through [node-llama-cpp](https://github.com/withcatai/node-llama-cpp) and [llama.cpp](https://github.com/ggml-org/llama.cpp)
+- Translation with [Claude](https://platform.claude.com/docs) by Anthropic, through [@anthropic-ai/sdk](https://github.com/anthropics/anthropic-sdk-typescript)
 - Translation with the [Google Gemini API](https://ai.google.dev/), through [@google/genai](https://github.com/googleapis/js-genai)
 - Opus decoding with [@discordjs/opus](https://github.com/discordjs/opus)
 
