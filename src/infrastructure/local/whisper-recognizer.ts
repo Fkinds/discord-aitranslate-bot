@@ -28,6 +28,15 @@ export interface RecognizerOptions {
 const MAX_STRETCH_SECONDS = 20;
 /** The samples Silero VAD takes at a time at 16 kHz. */
 const VAD_WINDOW = 512;
+/**
+ * The most tokens Whisper may write for each second of speech. sherpa-onnx
+ * stops decoding there, at 6 unless told otherwise, which cut short what was
+ * said quickly in Japanese and Korean. 12 is the value of the example in the
+ * change that made it an option (k2-fsa/sherpa-onnx#4211). Decoding still
+ * stops at the end of what was said; only a stretch Whisper repeats itself in
+ * runs on to the limit.
+ */
+const MAX_TOKENS_PER_SECOND = 12;
 
 /**
  * Hears speech with Whisper large-v3-turbo, after Silero VAD has found the
@@ -78,6 +87,7 @@ export class WhisperRecognizer implements SpeechRecognizer {
     const heard: Array<{ text: string; language: string; samples: number }> = [];
     for (const stretch of this.speechIn(samplesOf(audio))) {
       const stream = this.whisper.createStream();
+      stream.setOption('max_tokens_per_second', String(MAX_TOKENS_PER_SECOND));
       stream.acceptWaveform({ sampleRate: SpeechAudio.SAMPLE_RATE_HZ, samples: stretch });
       const result = await this.whisper.decodeAsync(stream);
       const text = result.text.trim();

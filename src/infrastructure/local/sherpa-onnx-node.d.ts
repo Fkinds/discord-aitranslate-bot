@@ -71,6 +71,8 @@ declare module 'sherpa-onnx-node' {
 
   export class OfflineStream {
     acceptWaveform(waveform: { readonly samples: Float32Array; readonly sampleRate: number }): void;
+    /** Set an option of this stream only, such as Whisper's "max_tokens_per_second"; the value is a string, even for a number. */
+    setOption(key: string, value: string): void;
   }
 
   export class OfflineRecognizer {
