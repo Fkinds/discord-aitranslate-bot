@@ -140,12 +140,12 @@ describe('DiscordVoice', () => {
       await voice.join(GUILD, VOICE);
     });
 
-    it("records a member's utterance until they have been silent for 300 ms", async () => {
+    it("records a member's utterance until they have been silent for 800 ms", async () => {
       connection.receiver.speaking.emit('start', '30');
 
       expect(listener.events).toEqual(['started 1 30', 'utterance 1 30']);
       expect(connection.receiver.subscribe).toHaveBeenCalledWith('30', {
-        end: { behavior: EndBehaviorType.AfterSilence, duration: 300 },
+        end: { behavior: EndBehaviorType.AfterSilence, duration: 800 },
       });
       expect((await listener.speeches[0])?.isEmpty).toBe(true);
     });
