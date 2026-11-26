@@ -104,6 +104,28 @@ describe('TranslateUtterance', () => {
     expect(posted(publisher.posts[0])).toEqual([]);
   });
 
+  it.each([
+    ['one language', { language: 'ja' }],
+    ['a pair', { language: 'ja', second: 'ko' }],
+  ])('posts nothing when what was said was translated into none of %s', async (_, languages) => {
+    sessions.save(aSession(languages));
+    translator.translatesNothing();
+
+    const result = await translateUtterance.execute(utterance());
+
+    expect(result).toEqual({ kind: 'notTranslated' });
+    expect(publisher.posts).toEqual([]);
+  });
+
+  it("posts only what was said in the session's one language, with no translation to leave out", async () => {
+    sessions.save(aSession({ language: 'ja' }));
+    translator.hears(LanguageCode.of('ja'));
+    translator.translatesNothing();
+
+    await expect(translateUtterance.execute(utterance())).resolves.toMatchObject({ kind: 'posted' });
+    expect(posted(publisher.posts[0])).toEqual([]);
+  });
+
   it('posts nothing when the speech had no words in it', async () => {
     sessions.save(aSession());
     translator.hearsNothing();

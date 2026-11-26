@@ -14,6 +14,8 @@ export interface TranslateUtteranceCommand {
 export type TranslateUtteranceResult =
   | { readonly kind: 'posted'; readonly translation: SpeechTranslation }
   | { readonly kind: 'nothingHeard' }
+  /** Something was said, but translated into none of the languages it is to be posted in; nothing was posted. */
+  | { readonly kind: 'notTranslated' }
   | { readonly kind: 'notRunning' };
 
 /**
@@ -27,7 +29,9 @@ export type TranslateUtteranceResult =
  *
  * The session's languages decide what is posted, by the language that was
  * spoken (TranslationLanguages.targetsFor). Nothing is posted when nothing
- * was said.
+ * was said, or when it was translated into none of those languages. When
+ * there were none to translate into, the session's one language having been
+ * spoken, what was said is posted on its own.
  */
 export class TranslateUtterance {
   constructor(
@@ -48,12 +52,15 @@ export class TranslateUtterance {
     if (heard.original.trim() === '') return { kind: 'nothingHeard' };
 
     const targets = session.languages.targetsFor(heard.spokenLanguage);
+    const translations = heard.translations.filter(({ language }) => targets.some((target) => target.equals(language)));
+    if (targets.length > 0 && translations.length === 0) return { kind: 'notTranslated' };
+
     await this.publisher.publish({
       guildId: session.guildId,
       textChannelId: session.textChannelId,
       speakerId: command.speakerId,
       original: heard.original,
-      translations: heard.translations.filter(({ language }) => targets.some((target) => target.equals(language))),
+      translations,
     });
     return { kind: 'posted', translation: heard };
   }

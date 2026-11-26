@@ -6,13 +6,14 @@ import type { SpeechTranslation, Translator } from '../../../src/usecases/ports/
 /**
  * A Translator that records requests and can be told to fail. It hears
  * "<bytes> bytes of speech" in the language it is told, and translates that
- * into each language as "translated into <tag>".
+ * into each language as "translated into <tag>", or into none when told.
  */
 export class FakeTranslator implements Translator {
   readonly requests: Array<{ bytes: number; languages: string }> = [];
   private error: Error | undefined;
   private spoken: LanguageCode | null = null;
   private silent = false;
+  private untranslatable = false;
 
   /** Make the next translation fail with this error. */
   failNext(error: Error): void {
@@ -29,6 +30,11 @@ export class FakeTranslator implements Translator {
     this.silent = true;
   }
 
+  /** Translate into none of the languages from now on, as for a language it does not know. */
+  translatesNothing(): void {
+    this.untranslatable = true;
+  }
+
   async translate(audio: SpeechAudio, languages: TranslationLanguages): Promise<SpeechTranslation> {
     this.requests.push({ bytes: audio.pcm.byteLength, languages: languages.toString() });
     const error = this.error;
@@ -37,7 +43,7 @@ export class FakeTranslator implements Translator {
     return {
       original: this.silent ? '' : `${audio.pcm.byteLength} bytes of speech`,
       spokenLanguage: this.spoken,
-      translations: languages.languages.map((language) => ({
+      translations: (this.untranslatable ? [] : languages.languages).map((language) => ({
         language,
         text: this.silent ? '' : `translated into ${language.tag}`,
       })),

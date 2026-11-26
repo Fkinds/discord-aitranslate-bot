@@ -11,7 +11,9 @@ export interface SpeechTranslation {
   /**
    * What was said, in the session's languages, in their order: at least in
    * each that it is to be posted in (TranslationLanguages.targetsFor the
-   * spoken language). A translator may leave out the others.
+   * spoken language). A translator may leave out the others, and may leave
+   * out every one when it cannot translate what was said, such as from a
+   * language it does not know.
    */
   readonly translations: ReadonlyArray<{ readonly language: LanguageCode; readonly text: string }>;
 }
