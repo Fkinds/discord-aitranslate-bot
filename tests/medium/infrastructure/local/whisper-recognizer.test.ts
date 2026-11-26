@@ -11,6 +11,20 @@ function pcm(seconds: number, sample: (index: number) => number): Uint8Array {
   return bytes;
 }
 
+/** The speech played `times` as fast, by linear interpolation, so its pitch rises too. */
+function fasterBy(times: number, speech: SpeechAudio): SpeechAudio {
+  const samples = speech.pcm.byteLength / 2;
+  const at = (i: number) => Buffer.from(speech.pcm.buffer, speech.pcm.byteOffset, speech.pcm.byteLength).readInt16LE(i * 2);
+  return SpeechAudio.fromPcm(
+    pcm(samples / times / SpeechAudio.SAMPLE_RATE_HZ, (i) => {
+      const position = i * times;
+      const before = Math.min(Math.floor(position), samples - 1);
+      const after = Math.min(before + 1, samples - 1);
+      return Math.round(at(before) + (at(after) - at(before)) * (position - before));
+    })
+  );
+}
+
 /** Noise that is the same on every run: a linear congruential generator, not Math.random. */
 function noise(seconds: number): Uint8Array {
   let state = 1;
@@ -35,6 +49,16 @@ describe('WhisperRecognizer, with the local models', () => {
 
       expect(heard.language).toBe('ja');
       expect(heard.text).toMatch(/岩田さんの車/);
+    },
+    LOCAL_MODEL_TIMEOUT_MS
+  );
+
+  it(
+    'hears the whole of what was said quickly, past the 6 tokens a second sherpa-onnx stops at by default',
+    async () => {
+      const heard = await recognizer.recognize(fasterBy(1.6, recordedSpeech()));
+
+      expect(heard.text).toMatch(/岩田さんの車で.*(いきました|行きました)/);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
