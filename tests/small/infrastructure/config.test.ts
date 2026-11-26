@@ -65,6 +65,33 @@ describe('readConfig', () => {
     expect(readConfig({ ...withoutKeys, TRANSLATOR: 'fake' }, CWD).translator).toEqual({ kind: 'fake' });
   });
 
+  it('translates with TranslateGemma on Ollama on this machine by default, needing no API key', () => {
+    const { ANTHROPIC_API_KEY: _anthropic, GOOGLE_GEMINI_API_KEY: _gemini, ...withoutKeys } = REQUIRED;
+
+    expect(readConfig({ ...withoutKeys, TRANSLATOR: 'translategemma' }, CWD).translator).toEqual({
+      kind: 'translategemma',
+      ollamaUrl: 'http://127.0.0.1:11434/',
+      model: 'translategemma:12b',
+      modelsDir: '/srv/bot/models',
+    });
+  });
+
+  it('reads OLLAMA_HOST as Ollama does, and TRANSLATEGEMMA_MODEL', () => {
+    const config = readConfig(
+      { ...REQUIRED, TRANSLATOR: 'translategemma', OLLAMA_HOST: 'gpu-box', TRANSLATEGEMMA_MODEL: 'translategemma:4b' },
+      CWD
+    );
+
+    expect(config.translator).toMatchObject({ ollamaUrl: 'http://gpu-box:11434/', model: 'translategemma:4b' });
+  });
+
+  it('rejects an OLLAMA_HOST that is not http or https at startup', () => {
+    const reading = () => readConfig({ ...REQUIRED, TRANSLATOR: 'translategemma', OLLAMA_HOST: 'tcp://gpu-box' }, CWD);
+
+    expect(reading).toThrow(ConfigError);
+    expect(reading).toThrow('OLLAMA_HOST must be http or https, got "tcp://gpu-box"');
+  });
+
   it.each([
     ['an absolute directory as it is', '/var/cache/models', '/var/cache/models'],
     ['a relative directory from the working directory', '../shared/models', '/srv/shared/models'],
@@ -77,7 +104,7 @@ describe('readConfig', () => {
     ['the local translator, which is gone', 'local'],
   ])('rejects %s', (_case, translator) => {
     expect(() => readConfig({ ...REQUIRED, TRANSLATOR: translator }, CWD)).toThrow(
-      new ConfigError(`TRANSLATOR must be one of claude, gemini, fake, got "${translator}"`)
+      new ConfigError(`TRANSLATOR must be one of claude, gemini, translategemma, fake, got "${translator}"`)
     );
   });
 
@@ -90,6 +117,7 @@ describe('readConfig', () => {
   it.each([
     ['claude', 'zh-TW'],
     ['claude', 'ja,vi'],
+    ['translategemma', 'zh-TW'],
   ])(
     'rejects at startup, for TRANSLATOR=%s, %j, which the commands do not offer and Whisper cannot tell',
     (translator, languages) => {
@@ -137,6 +165,15 @@ describe('readModelsConfig', () => {
     ['an empty one as unset', '', '/srv/bot/models'],
   ])('takes %s', (_case, modelsDir, expected) => {
     expect(readModelsConfig({ MODELS_DIR: modelsDir }, '/srv/bot').modelsDir).toBe(expected);
+  });
+
+  it('with TRANSLATOR=translategemma, also names the model for Ollama to pull, and where Ollama is', () => {
+    expect(readModelsConfig({ TRANSLATOR: 'translategemma', OLLAMA_HOST: ':11500' }, '/srv/bot').translateGemma).toEqual({
+      ollamaUrl: 'http://127.0.0.1:11500/',
+      model: 'translategemma:12b',
+    });
+    expect(readModelsConfig({ TRANSLATOR: 'claude', OLLAMA_HOST: ':11500' }, '/srv/bot').translateGemma).toBeUndefined();
+    expect(() => readModelsConfig({ TRANSLATOR: 'translategemma', OLLAMA_HOST: 'tcp://x' }, '/srv/bot')).toThrow(ConfigError);
   });
 
   it('reads the log level, rejecting one not listed in .env.example', () => {

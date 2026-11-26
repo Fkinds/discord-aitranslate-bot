@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ClaudeTextTranslator, CREDENTIALS_HINT } from '../../src/infrastructure/claude/claude-text-translator';
 import { OneAtATime } from '../../src/infrastructure/local/one-at-a-time';
-import { requireClaude, translatorFor } from '../../src/main';
+import { OllamaClient } from '../../src/infrastructure/ollama/ollama-client';
+import { requireClaude, requireTranslateGemma, translatorFor } from '../../src/main';
 import { FakeLogger } from '../support/fakes/fake-logger';
 import { HttpStub, type StubResponse } from '../support/http-stub';
 import { LOCAL_MODEL_TIMEOUT_MS, localModelsDir } from '../support/local-models';
@@ -153,5 +154,153 @@ describe('translatorFor, with TRANSLATOR=claude', () => {
         'Run pnpm models:download, or set MODELS_DIR to where they are'
     );
     expect(api.requests).toEqual([]);
+  });
+});
+
+const TRANSLATEGEMMA = 'translategemma:12b';
+const SHOWN: StubResponse = { status: 200, body: { details: { family: 'gemma3' } } };
+const LOADED: StubResponse = { status: 200, body: { model: TRANSLATEGEMMA, response: '', done: true, done_reason: 'load' } };
+const ollamaFailure = (status: number, error: string): StubResponse => ({ status, body: { error } });
+
+// The startup check, against a stand-in for Ollama on localhost.
+describe('requireTranslateGemma', () => {
+  let ollama: HttpStub;
+  let logger: FakeLogger;
+  const client = () => new OllamaClient(new URL(ollama.url), { timeoutMs: 200, retryDelayMs: 10 });
+
+  beforeEach(async () => {
+    ollama = await HttpStub.start();
+    logger = new FakeLogger();
+  });
+
+  afterEach(async () => {
+    await ollama.stop();
+  });
+
+  it('checks that Ollama has the model, then loads it', async () => {
+    ollama.respond(SHOWN, LOADED);
+
+    await requireTranslateGemma(client(), TRANSLATEGEMMA, logger);
+
+    expect(ollama.requests.map(({ url }) => url)).toEqual(['/api/show', '/api/generate']);
+    expect(logger.entries).toEqual([
+      { level: 'info', message: 'Checking that Ollama has TranslateGemma', meta: { ollama: `${ollama.url}/`, model: TRANSLATEGEMMA } },
+      { level: 'info', message: 'Loading TranslateGemma', meta: { model: TRANSLATEGEMMA } },
+      { level: 'info', message: 'Loaded TranslateGemma' },
+    ]);
+  });
+
+  it('stops the bot when Ollama does not have the model, saying how to get it', async () => {
+    ollama.respond(ollamaFailure(404, `model '${TRANSLATEGEMMA}' not found`));
+
+    await expect(requireTranslateGemma(client(), TRANSLATEGEMMA, logger)).rejects.toThrow(
+      `Ollama does not have ${TRANSLATEGEMMA}. Run pnpm models:download, or ollama pull ${TRANSLATEGEMMA}`
+    );
+    expect(ollama.requests).toHaveLength(1);
+  });
+
+  it('stops the bot when Ollama refuses to be asked', async () => {
+    ollama.respond(ollamaFailure(400, 'invalid model name'));
+
+    await expect(requireTranslateGemma(client(), 'translategemma:12b!', logger)).rejects.toThrow(
+      'Ollama cannot be asked for translategemma:12b!: Ollama answered HTTP 400: invalid model name'
+    );
+  });
+
+  it('warns, and goes on, when Ollama cannot be asked now', async () => {
+    ollama.respond(ollamaFailure(503, 'busy'), ollamaFailure(503, 'busy'));
+
+    await requireTranslateGemma(client(), TRANSLATEGEMMA, logger);
+
+    expect(logger.entries).toContainEqual({
+      level: 'warn',
+      message: 'Could not check that Ollama has TranslateGemma; going on, and translations fail until it can be',
+      meta: { reason: 'Ollama answered HTTP 503: busy' },
+    });
+    expect(ollama.requests.map(({ url }) => url)).toEqual(['/api/show', '/api/show']);
+  });
+
+  it('warns, and goes on, when Ollama cannot load the model', async () => {
+    ollama.respond(SHOWN, ollamaFailure(500, 'model requires more system memory'), ollamaFailure(500, 'model requires more system memory'));
+
+    await requireTranslateGemma(client(), TRANSLATEGEMMA, logger);
+
+    expect(logger.entries).toContainEqual({
+      level: 'warn',
+      message: 'Could not load TranslateGemma; going on, and the first translation loads it',
+      meta: { reason: 'Ollama answered HTTP 500: model requires more system memory' },
+    });
+  });
+});
+
+// Whisper with TranslateGemma, as main.ts builds it: the models from models/, Ollama on localhost.
+describe('translatorFor, with TRANSLATOR=translategemma', () => {
+  const empty = mkdtemp(path.join(tmpdir(), 'models-'));
+  let ollama: HttpStub;
+  const config = (modelsDir: string) => ({ kind: 'translategemma' as const, ollamaUrl: `${ollama.url}/`, model: TRANSLATEGEMMA, modelsDir });
+
+  beforeEach(async () => {
+    ollama = await HttpStub.start();
+  });
+
+  afterEach(async () => {
+    await ollama.stop();
+  });
+
+  afterAll(async () => {
+    await rm(await empty, { recursive: true, force: true });
+  });
+
+  it(
+    'checks that Ollama has TranslateGemma and loads it, loads Whisper, and translates one utterance at a time',
+    async () => {
+      ollama.respond(SHOWN, LOADED);
+      const logger = new FakeLogger();
+
+      const translator = await translatorFor(config(localModelsDir()), logger);
+
+      expect(translator).toBeInstanceOf(OneAtATime);
+      expect(logger.messages('info')).toEqual([
+        'Checking that Ollama has TranslateGemma',
+        'Loading TranslateGemma',
+        'Loaded TranslateGemma',
+        'Loading the local models',
+        'Loaded the local models',
+      ]);
+    },
+    LOCAL_MODEL_TIMEOUT_MS
+  );
+
+  it(
+    'goes on to load Whisper when Ollama is not running',
+    async () => {
+      const stopped = config(localModelsDir());
+      await ollama.stop();
+      ollama = await HttpStub.start();
+      const logger = new FakeLogger();
+
+      const translator = await translatorFor(stopped, logger);
+
+      expect(translator).toBeInstanceOf(OneAtATime);
+      expect(logger.messages('warn')).toEqual([
+        'Could not check that Ollama has TranslateGemma; going on, and translations fail until it can be',
+      ]);
+    },
+    LOCAL_MODEL_TIMEOUT_MS
+  );
+
+  it('stops the bot at startup when Ollama does not have the model, before loading Whisper', async () => {
+    ollama.respond(ollamaFailure(404, `model '${TRANSLATEGEMMA}' not found`));
+    const logger = new FakeLogger();
+
+    await expect(translatorFor(config(localModelsDir()), logger)).rejects.toThrow(`Ollama does not have ${TRANSLATEGEMMA}`);
+    expect(logger.messages('info')).not.toContain('Loading the local models');
+  });
+
+  it('stops the bot at startup when the speech models are missing, without asking Ollama', async () => {
+    const modelsDir = await empty;
+
+    await expect(translatorFor(config(modelsDir), new FakeLogger())).rejects.toThrow(`The local models are missing from ${modelsDir}`);
+    expect(ollama.requests).toEqual([]);
   });
 });

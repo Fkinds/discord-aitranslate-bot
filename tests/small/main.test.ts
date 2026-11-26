@@ -32,6 +32,28 @@ describe('startNoticeFor', () => {
     expect(startNoticeFor({ kind: 'gemini', apiKey: 'key', model: 'gemini-3.8-flash' })).toContain('sent to Google Gemini');
   });
 
+  it.each(['http://127.0.0.1:11434/', 'http://localhost:11434/', 'http://[::1]:11434/'])(
+    'says that nothing leaves the machine with TranslateGemma on Ollama at %s',
+    (ollamaUrl) => {
+      expect(startNoticeFor({ kind: 'translategemma', ollamaUrl, model: 'translategemma:12b', modelsDir: '/srv/bot/models' })).toBe(
+        "What is said there is transcribed and translated on the bot's own machine, and sent nowhere."
+      );
+    }
+  );
+
+  it('says that the text goes to a TranslateGemma server on another machine, without naming it', () => {
+    const notice = startNoticeFor({
+      kind: 'translategemma',
+      ollamaUrl: 'http://gpu-box:11434/',
+      model: 'translategemma:12b',
+      modelsDir: '/srv/bot/models',
+    });
+
+    expect(notice).toBe(
+      "What is said there is transcribed on the bot's own machine, and the text is sent to a TranslateGemma server on Ollama to be translated."
+    );
+  });
+
   it('says that nothing is sent anywhere with TRANSLATOR=fake', () => {
     expect(startNoticeFor({ kind: 'fake' })).toBe('What is said there is not sent anywhere (TRANSLATOR=fake).');
   });

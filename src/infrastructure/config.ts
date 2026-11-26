@@ -3,6 +3,7 @@ import { LanguageCode, SUPPORTED_LANGUAGES } from '../domain/language-code';
 import { DomainError } from '../domain/shared/domain-error';
 import { TranslationLanguages } from '../domain/translation-languages';
 import { translatesInto } from './local/languages';
+import { ollamaUrlFrom } from './ollama/ollama-host';
 
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -11,6 +12,8 @@ export type TranslatorConfig =
   /** Without an API key, the SDK finds the credentials: a sign-in with `ant auth login`, or Workload Identity Federation. */
   | { readonly kind: 'claude'; readonly apiKey: string | undefined; readonly modelsDir: string }
   | { readonly kind: 'gemini'; readonly apiKey: string; readonly model: string }
+  /** `ollamaUrl` is where Ollama is, read from OLLAMA_HOST as Ollama reads it. */
+  | { readonly kind: 'translategemma'; readonly ollamaUrl: string; readonly model: string; readonly modelsDir: string }
   | { readonly kind: 'fake' };
 
 export interface Config {
@@ -36,6 +39,9 @@ export class ConfigError extends Error {
  */
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
+/** The TranslateGemma model when TRANSLATEGEMMA_MODEL is unset: the 12B one, which translated better than 4B in the trials (#86). */
+export const DEFAULT_TRANSLATEGEMMA_MODEL = 'translategemma:12b';
+
 /** Where the local models are kept when MODELS_DIR is unset, relative to the working directory. */
 export const DEFAULT_MODELS_DIR = 'models';
 
@@ -44,7 +50,10 @@ type Env = Readonly<Record<string, string | undefined>>;
 type TranslatorKind = TranslatorConfig['kind'];
 
 /** The values of TRANSLATOR; the first is the default. */
-const TRANSLATORS: readonly TranslatorKind[] = ['claude', 'gemini', 'fake'];
+const TRANSLATORS: readonly TranslatorKind[] = ['claude', 'gemini', 'translategemma', 'fake'];
+
+/** The translators that hear speech with Whisper, which tells only the languages offered in the commands apart. */
+const HEARING_WITH_WHISPER: readonly TranslatorKind[] = ['claude', 'translategemma'];
 
 function isTranslatorKind(value: string): value is TranslatorKind {
   return (TRANSLATORS as readonly string[]).includes(value);
@@ -57,6 +66,7 @@ function isTranslatorKind(value: string): value is TranslatorKind {
 const API_KEYS: Readonly<Record<TranslatorKind, string | undefined>> = {
   claude: undefined,
   gemini: 'GOOGLE_GEMINI_API_KEY',
+  translategemma: undefined,
   fake: undefined,
 };
 
@@ -84,7 +94,7 @@ export function readConfig(env: Env, workingDir: string): Config {
 
   const defaultLanguages = languagesFrom(value('DEFAULT_TARGET_LANGUAGE') ?? 'ja');
   const untranslatable = defaultLanguages.languages.filter((language) => !translatesInto(language));
-  if (kind === 'claude' && untranslatable.length > 0) {
+  if (HEARING_WITH_WHISPER.includes(kind) && untranslatable.length > 0) {
     throw new ConfigError(
       `DEFAULT_TARGET_LANGUAGE: TRANSLATOR=${kind} does not translate into ${untranslatable.join(', ')}. ` +
         `Use the languages offered in the commands (${SUPPORTED_LANGUAGES.join(', ')}), or TRANSLATOR=gemini`
@@ -110,8 +120,20 @@ function translatorFrom(
       return { kind, apiKey: value('ANTHROPIC_API_KEY'), modelsDir: modelsDirFrom(value, workingDir) };
     case 'gemini':
       return { kind, apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL };
+    case 'translategemma':
+      return { kind, ...translateGemmaFrom(value), modelsDir: modelsDirFrom(value, workingDir) };
     case 'fake':
       return { kind };
+  }
+}
+
+/** Where Ollama is, from OLLAMA_HOST, and the TranslateGemma model it runs. */
+function translateGemmaFrom(value: (name: string) => string | undefined): { ollamaUrl: string; model: string } {
+  try {
+    return { ollamaUrl: ollamaUrlFrom(value('OLLAMA_HOST')).href, model: value('TRANSLATEGEMMA_MODEL') ?? DEFAULT_TRANSLATEGEMMA_MODEL };
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    throw new ConfigError(error.message, { cause: error });
   }
 }
 
@@ -123,6 +145,8 @@ function modelsDirFrom(value: (name: string) => string | undefined, workingDir: 
 export interface ModelsConfig {
   /** An absolute path. */
   readonly modelsDir: string;
+  /** With TRANSLATOR=translategemma, the model for Ollama to pull, and where Ollama is. */
+  readonly translateGemma?: { readonly ollamaUrl: string; readonly model: string };
   readonly logLevel: LogLevel;
 }
 
@@ -136,6 +160,7 @@ export function readModelsConfig(env: Env, workingDir: string): ModelsConfig {
   const value = (name: string): string | undefined => env[name] || undefined;
   return {
     modelsDir: modelsDirFrom(value, workingDir),
+    ...(value('TRANSLATOR') === 'translategemma' ? { translateGemma: translateGemmaFrom(value) } : {}),
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
   };
 }
