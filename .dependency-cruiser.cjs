@@ -8,7 +8,8 @@
 //   main.ts,        everything (the entry points, which compose the layers)
 //   deploy-commands.ts,
 //   download-models.ts,
-//   evaluate-speech.ts
+//   evaluate-speech.ts,
+//   evaluate-translation.ts
 //
 // Nothing depends on the entry points.
 
@@ -48,7 +49,7 @@ module.exports = {
       comment: 'The entry points compose the layers; nothing imports them.',
       severity: 'error',
       from: {},
-      to: { path: '^src/(main|deploy-commands|download-models|evaluate-speech)\\.ts$' },
+      to: { path: '^src/(main|deploy-commands|download-models|evaluate-speech|evaluate-translation)\\.ts$' },
     },
     {
       name: 'no-circular',

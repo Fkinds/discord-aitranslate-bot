@@ -103,6 +103,16 @@ export class OllamaClient {
   }
 
   /**
+   * Take the model out of memory now, rather than keep it loaded, as for
+   * trying several models one after another.
+   *
+   * @throws OllamaRequestFailed
+   */
+  async unload(model: string): Promise<void> {
+    await this.post('api/generate', { model, keep_alive: 0 });
+  }
+
+  /**
    * Download the model, or find that it is all there already, telling
    * `onProgress` of each step Ollama reports. A download stopped part way
    * goes on from there the next time. It is not given up on after a time,

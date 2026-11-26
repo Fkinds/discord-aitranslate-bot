@@ -11,6 +11,7 @@
     "deploy-commands": "ts-node src/deploy-commands.ts",
     "models:download": "ts-node src/download-models.ts",
     "eval:speech": "ts-node --files src/evaluate-speech.ts",
+    "eval:translation": "ts-node --files src/evaluate-translation.ts",
     "test": "jest --selectProjects small",
     "test:small": "jest --selectProjects small",
     "test:medium": "jest --selectProjects medium --runInBand",
