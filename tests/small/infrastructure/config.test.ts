@@ -152,6 +152,32 @@ describe('readConfig', () => {
   it('rejects a log level other than those listed in .env.example', () => {
     expect(() => readConfig({ ...REQUIRED, LOG_LEVEL: 'verbose' }, CWD)).toThrow(ConfigError);
   });
+
+  it('records no one by default', () => {
+    expect(readConfig(REQUIRED, CWD).recording).toBeUndefined();
+  });
+
+  it("records a member's utterances with RECORD_SPEECH_OF and RECORDINGS_DIR, from the working directory", () => {
+    const { recording } = readConfig({ ...REQUIRED, RECORD_SPEECH_OF: '533849889923399690', RECORDINGS_DIR: 'recordings' }, CWD);
+
+    expect(recording?.userId.value).toBe('533849889923399690');
+    expect(recording?.dir).toBe('/srv/bot/recordings');
+  });
+
+  it.each([
+    ['RECORD_SPEECH_OF alone', { RECORD_SPEECH_OF: '533849889923399690' }],
+    ['RECORDINGS_DIR alone', { RECORDINGS_DIR: 'recordings' }],
+  ])('rejects %s at startup', (_, variables) => {
+    expect(() => readConfig({ ...REQUIRED, ...variables }, CWD)).toThrow(
+      'RECORD_SPEECH_OF and RECORDINGS_DIR go together: set both to record, or neither'
+    );
+  });
+
+  it('rejects a RECORD_SPEECH_OF that is not a Discord user ID at startup', () => {
+    expect(() => readConfig({ ...REQUIRED, RECORD_SPEECH_OF: 'alice', RECORDINGS_DIR: 'recordings' }, CWD)).toThrow(
+      /^RECORD_SPEECH_OF: /
+    );
+  });
 });
 
 describe('readModelsConfig', () => {

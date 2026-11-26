@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { UserId } from '../domain/discord-ids';
 import { LanguageCode, SUPPORTED_LANGUAGES } from '../domain/language-code';
 import { DomainError } from '../domain/shared/domain-error';
 import { TranslationLanguages } from '../domain/translation-languages';
@@ -23,6 +24,14 @@ export interface Config {
   /** The languages /translate-join translates into when none are chosen. */
   readonly defaultLanguages: TranslationLanguages;
   readonly logLevel: LogLevel;
+  /** Whose utterances to record, and where, to measure how well they are heard; unset to record none. */
+  readonly recording?: RecordingConfig;
+}
+
+export interface RecordingConfig {
+  readonly userId: UserId;
+  /** An absolute path. */
+  readonly dir: string;
 }
 
 /** The settings are missing or malformed; the message says which and how. */
@@ -107,7 +116,26 @@ export function readConfig(env: Env, workingDir: string): Config {
     translator: translatorFrom(kind, value, workingDir),
     defaultLanguages,
     logLevel: logLevelFrom(value('LOG_LEVEL') ?? 'info'),
+    ...recordingFrom(value, workingDir),
   };
+}
+
+/** RECORD_SPEECH_OF and RECORDINGS_DIR, which go together; a relative directory is taken from `workingDir`. */
+function recordingFrom(
+  value: (name: string) => string | undefined,
+  workingDir: string
+): { recording?: RecordingConfig } {
+  const [member, dir] = [value('RECORD_SPEECH_OF'), value('RECORDINGS_DIR')];
+  if (member === undefined && dir === undefined) return {};
+  if (member === undefined || dir === undefined) {
+    throw new ConfigError('RECORD_SPEECH_OF and RECORDINGS_DIR go together: set both to record, or neither');
+  }
+  try {
+    return { recording: { userId: UserId.of(member), dir: path.resolve(workingDir, dir) } };
+  } catch (error) {
+    if (!(error instanceof DomainError)) throw error;
+    throw new ConfigError(`RECORD_SPEECH_OF: ${error.message}`, { cause: error });
+  }
 }
 
 function translatorFrom(
