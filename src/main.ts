@@ -12,7 +12,10 @@ import { missingModelFiles } from './infrastructure/local/model-download';
 import { LOCAL_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
 import { OneAtATime } from './infrastructure/local/one-at-a-time';
 import { WhisperRecognizer } from './infrastructure/local/whisper-recognizer';
+import { OllamaClient, OllamaRequestFailed } from './infrastructure/ollama/ollama-client';
+import { isOnThisMachine } from './infrastructure/ollama/ollama-host';
 import { PlaceholderTranslator } from './infrastructure/placeholder-translator';
+import { TranslateGemmaTextTranslator } from './infrastructure/translategemma/translategemma-text-translator';
 import { createLogger } from './infrastructure/winston-logger';
 import { CommandHandler } from './interfaces/discord/command-handler';
 import { VoiceEventHandler } from './interfaces/discord/voice-event-handler';
@@ -30,6 +33,12 @@ import { TranslateUtterance } from './usecases/translate-utterance';
 
 /** The CPU threads Whisper uses on this machine. */
 const LOCAL_THREADS = 4;
+
+/** How long a request to Ollama may take, and how long to wait before trying one again (#86). */
+const OLLAMA_OPTIONS = { timeoutMs: 15_000, retryDelayMs: 1_000 };
+
+/** How long Ollama may take to load TranslateGemma at startup; the 12B model took 7 s in the trials. */
+const TRANSLATEGEMMA_LOAD_TIMEOUT_MS = 120_000;
 
 /** Fail, saying which files are missing and what to do, unless every one of them is in `modelsDir`. */
 async function requireModels(files: readonly ModelFile[], modelsDir: string): Promise<void> {
@@ -74,6 +83,50 @@ export async function requireClaude(claude: ClaudeTextTranslator, logger: Logger
   }
 }
 
+/** Whether a failed request to Ollama may pass: Ollama could not be asked now, or failed. */
+function mayPass(error: OllamaRequestFailed): boolean {
+  return error.failure === 'unreachable' || error.failure === 'timeout' || (error.status ?? 0) >= 500;
+}
+
+/**
+ * Fail unless Ollama has the TranslateGemma model, saying how to get it, then
+ * load the model, so that the first translation does not wait for it. When
+ * Ollama cannot be asked now, or cannot load the model, warn, and go on: it
+ * may still be starting.
+ */
+export async function requireTranslateGemma(ollama: OllamaClient, model: string, logger: Logger): Promise<void> {
+  logger.info('Checking that Ollama has TranslateGemma', { ollama: ollama.url, model });
+  let has: boolean;
+  try {
+    has = await ollama.hasModel(model);
+  } catch (error) {
+    if (!(error instanceof OllamaRequestFailed)) throw error;
+    if (!mayPass(error)) throw new Error(`Ollama cannot be asked for ${model}: ${error.message}`, { cause: error });
+    logger.warn('Could not check that Ollama has TranslateGemma; going on, and translations fail until it can be', {
+      reason: error.message,
+    });
+    return;
+  }
+  if (!has) throw new Error(`Ollama does not have ${model}. Run pnpm models:download, or ollama pull ${model}`);
+
+  logger.info('Loading TranslateGemma', { model });
+  try {
+    await ollama.load(model, TRANSLATEGEMMA_LOAD_TIMEOUT_MS);
+    logger.info('Loaded TranslateGemma');
+  } catch (error) {
+    if (!(error instanceof OllamaRequestFailed)) throw error;
+    logger.warn('Could not load TranslateGemma; going on, and the first translation loads it', { reason: error.message });
+  }
+}
+
+/** Whisper, from the models in `modelsDir`, which it loads now, so that the first utterance does not wait for them. */
+async function loadWhisper(modelsDir: string, logger: Logger): Promise<WhisperRecognizer> {
+  logger.info('Loading the local models', { modelsDir });
+  const recognizer = await WhisperRecognizer.load(modelsDir, { threads: LOCAL_THREADS });
+  logger.info('Loaded the local models');
+  return recognizer;
+}
+
 /**
  * The translator the settings ask for.
  *
@@ -85,8 +138,12 @@ export async function requireClaude(claude: ClaudeTextTranslator, logger: Logger
  * to 3 attempts in all, 1 s and then 2 s apart, or after the wait Gemini asks
  * for when that is at most 5 s.
  *
- * @throws Error when the local models are missing or cannot be loaded, or
- *   Claude cannot be called.
+ * With TranslateGemma, it is the same, but that the bot stops when Ollama does
+ * not have the model, and loads it. Each request to Ollama may take 15 s; one
+ * that could not be sent, or that Ollama failed, is tried again once, 1 s later.
+ *
+ * @throws Error when the local models are missing or cannot be loaded, Claude
+ *   cannot be called, or Ollama does not have TranslateGemma.
  */
 export async function translatorFor(config: TranslatorConfig, logger: Logger, clock: Clock = () => new Date()): Promise<Translator> {
   switch (config.kind) {
@@ -94,10 +151,16 @@ export async function translatorFor(config: TranslatorConfig, logger: Logger, cl
       await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
       const claude = new ClaudeTextTranslator(config.apiKey, { timeoutMs: 15_000, maxRetries: 2 }, logger);
       await requireClaude(claude, logger);
-      logger.info('Loading the local models', { modelsDir: config.modelsDir });
-      const recognizer = await WhisperRecognizer.load(config.modelsDir, { threads: LOCAL_THREADS });
-      logger.info('Loaded the local models');
+      const recognizer = await loadWhisper(config.modelsDir, logger);
       return new OneAtATime(new LocalTranslator(recognizer, claude), clock, logger);
+    }
+    case 'translategemma': {
+      await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
+      const ollama = new OllamaClient(new URL(config.ollamaUrl), OLLAMA_OPTIONS);
+      await requireTranslateGemma(ollama, config.model, logger);
+      const recognizer = await loadWhisper(config.modelsDir, logger);
+      const translateGemma = new TranslateGemmaTextTranslator(ollama, config.model, logger);
+      return new OneAtATime(new LocalTranslator(recognizer, translateGemma), clock, logger);
     }
     case 'gemini':
       return new GeminiTranslator(
@@ -117,6 +180,10 @@ export function startNoticeFor(config: TranslatorConfig): string {
       return "What is said there is transcribed on the bot's own machine, and the text is sent to Anthropic's Claude to be translated.";
     case 'gemini':
       return 'What is said there is sent to Google Gemini to be translated.';
+    case 'translategemma':
+      return isOnThisMachine(new URL(config.ollamaUrl))
+        ? "What is said there is transcribed and translated on the bot's own machine, and sent nowhere."
+        : "What is said there is transcribed on the bot's own machine, and the text is sent to a TranslateGemma server on Ollama to be translated.";
     case 'fake':
       return 'What is said there is not sent anywhere (TRANSLATOR=fake).';
   }
