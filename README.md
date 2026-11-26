@@ -293,6 +293,8 @@ All configuration is done through environment variables, read from `.env`:
 | `GEMINI_MODEL` | Gemini model to use; it must take audio | `gemini-3.8-flash` |
 | `DEFAULT_TARGET_LANGUAGE` | A language tag, or two separated by a comma for a pair, such as `ja,ko`; with `TRANSLATOR=claude` or `translategemma`, one of the [10 offered](#-supported-languages) | `ja` |
 | `LOG_LEVEL` | `error`, `warn`, `info` or `debug` | `info` |
+| `RECORD_SPEECH_OF` | The Discord user ID of a member whose utterances to record as WAVE files, to measure how well the bot hears them; no one else is recorded. Record only someone who has agreed to it | None |
+| `RECORDINGS_DIR` | Where to put those recordings, with `RECORD_SPEECH_OF`; keep it outside the repository. A relative path is taken from the working directory | None |
 
 An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing speech models, credentials Claude cannot be called with, and an Ollama without the TranslateGemma model.
 

@@ -5,6 +5,7 @@ import sodium from 'libsodium-wrappers';
 import { type Config, readConfig, type TranslatorConfig } from './infrastructure/config';
 import { DiscordTranslationPublisher } from './infrastructure/discord/discord-translation-publisher';
 import { DiscordVoice } from './infrastructure/discord/discord-voice';
+import { RecordingVoiceListener } from './infrastructure/discord/speech-recorder';
 import { type ClaudeCredentials, ClaudeTextTranslator } from './infrastructure/claude/claude-text-translator';
 import { GeminiTranslator, geminiModel } from './infrastructure/gemini/gemini-translator';
 import { LocalTranslator } from './infrastructure/local/local-translator';
@@ -210,7 +211,17 @@ export function compose(
     },
     logger
   );
-  const voice = new DiscordVoice(client, voiceEvents, logger);
+  const { recording } = config;
+  if (recording) {
+    logger.info("Recording one member's utterances, to measure how well they are heard", {
+      userId: recording.userId.value,
+      dir: recording.dir,
+    });
+  }
+  const listener = recording
+    ? new RecordingVoiceListener(voiceEvents, recording.userId, recording.dir, clock, logger)
+    : voiceEvents;
+  const voice = new DiscordVoice(client, listener, logger);
   const commands = new CommandHandler(
     {
       startTranslation: new StartTranslation(sessions, voice, clock, config.defaultLanguages),
