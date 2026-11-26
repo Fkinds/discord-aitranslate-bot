@@ -15,6 +15,8 @@ export interface StubResponse {
   readonly body: unknown;
   /** How long to hold the response back. */
   readonly delayMs?: number;
+  /** Close the connection instead of answering, as a server that went away does. */
+  readonly hangUp?: boolean;
 }
 
 /**
@@ -62,6 +64,10 @@ export class HttpStub {
       const response = this.responses.shift() ?? { status: 500, body: { error: 'HttpStub has no response left' } };
       const send = () => {
         if (res.destroyed) return;
+        if (response.hangUp) {
+          res.socket?.destroy();
+          return;
+        }
         if (response.body instanceof Uint8Array) {
           res.writeHead(response.status, { 'content-type': 'application/octet-stream' });
           res.end(response.body);
