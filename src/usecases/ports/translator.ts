@@ -26,11 +26,24 @@ export class TranslationFailed extends Error {
   }
 }
 
+/**
+ * The translator gave up on the speech without translating it, as it had
+ * waited too long behind the speech before it: a translation that late is of
+ * no use to the conversation.
+ */
+export class TranslationAbandoned extends Error {
+  constructor(readonly waitedMs: number) {
+    super(`Gave up on the speech after it waited ${waitedMs} ms`);
+    this.name = new.target.name;
+  }
+}
+
 /** Turns speech into text in other languages. */
 export interface Translator {
   /**
    * Transcribe the speech and translate it into each of the languages.
    * @throws TranslationFailed when it cannot be translated.
+   * @throws TranslationAbandoned when it gave up on the speech for waiting too long.
    */
   translate(audio: SpeechAudio, languages: TranslationLanguages): Promise<SpeechTranslation>;
 }

@@ -1,7 +1,7 @@
 import type { GuildId, UserId } from '../domain/discord-ids';
 import type { SpeechAudio } from './ports/speech-audio';
 import type { TranslationPublisher } from './ports/translation-publisher';
-import type { SpeechTranslation, Translator } from './ports/translator';
+import { TranslationAbandoned, type SpeechTranslation, type Translator } from './ports/translator';
 import type { SessionStore } from './session-store';
 
 export interface TranslateUtteranceCommand {
@@ -16,6 +16,8 @@ export type TranslateUtteranceResult =
   | { readonly kind: 'nothingHeard' }
   /** Something was said, but translated into none of the languages it is to be posted in; nothing was posted. */
   | { readonly kind: 'notTranslated' }
+  /** The translator gave up on it for waiting too long behind the utterances before it; nothing was posted. */
+  | { readonly kind: 'abandoned'; readonly waitedMs: number }
   | { readonly kind: 'notRunning' };
 
 /**
@@ -31,7 +33,8 @@ export type TranslateUtteranceResult =
  * spoken (TranslationLanguages.targetsFor). Nothing is posted when nothing
  * was said, or when it was translated into none of those languages. When
  * there were none to translate into, the session's one language having been
- * spoken, what was said is posted on its own.
+ * spoken, what was said is posted on its own. Nothing is posted either for an
+ * utterance the translator gave up on, having waited too long.
  */
 export class TranslateUtterance {
   constructor(
@@ -48,7 +51,13 @@ export class TranslateUtterance {
     if (!session) return { kind: 'notRunning' };
     if (audio.isEmpty) return { kind: 'nothingHeard' };
 
-    const heard = await this.translator.translate(audio, session.languages);
+    let heard: SpeechTranslation;
+    try {
+      heard = await this.translator.translate(audio, session.languages);
+    } catch (error) {
+      if (error instanceof TranslationAbandoned) return { kind: 'abandoned', waitedMs: error.waitedMs };
+      throw error;
+    }
     if (heard.original.trim() === '') return { kind: 'nothingHeard' };
 
     const targets = session.languages.targetsFor(heard.spokenLanguage);

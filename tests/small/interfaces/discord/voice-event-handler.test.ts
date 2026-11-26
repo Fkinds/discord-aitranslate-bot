@@ -4,7 +4,7 @@ import { VoiceEventHandler } from '../../../../src/interfaces/discord/voice-even
 import { EndDisconnectedSession } from '../../../../src/usecases/end-disconnected-session';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { PublishFailed } from '../../../../src/usecases/ports/translation-publisher';
-import { TranslationFailed } from '../../../../src/usecases/ports/translator';
+import { TranslationAbandoned, TranslationFailed } from '../../../../src/usecases/ports/translator';
 import { RecordSpeakingStarted, RecordSpeakingStopped } from '../../../../src/usecases/record-speaking';
 import { SessionStore } from '../../../../src/usecases/session-store';
 import { TranslateUtterance } from '../../../../src/usecases/translate-utterance';
@@ -80,6 +80,21 @@ describe('VoiceEventHandler', () => {
 
     expect(publisher.posts).toEqual([]);
     expect(logger.messages('info')).toEqual(['Utterance not translated; nothing posted']);
+  });
+
+  it('warns of an utterance dropped for waiting too long, with how long it waited, and posts nothing', async () => {
+    sessions.save(aSession());
+    translator.failNext(new TranslationAbandoned(12_000));
+
+    await handler.utteranceStarted(GUILD, ALICE, speech());
+
+    expect(publisher.posts).toEqual([]);
+    expect(logger.entries).toContainEqual({
+      level: 'warn',
+      message: 'Dropped an utterance that waited too long to be translated',
+      meta: { guildId: '1', userId: '30', waitedMs: 12_000 },
+    });
+    expect(logger.messages('error')).toEqual([]);
   });
 
   it('logs an utterance in a server with no session', async () => {

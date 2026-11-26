@@ -60,6 +60,9 @@ export class VoiceEventHandler {
         case 'notTranslated':
           this.logger.info('Utterance not translated; nothing posted', ids);
           return;
+        case 'abandoned':
+          this.logger.warn('Dropped an utterance that waited too long to be translated', { ...ids, waitedMs: result.waitedMs });
+          return;
         case 'notRunning':
           this.logger.warn('Received audio stream for non-existent session', ids);
           return;
