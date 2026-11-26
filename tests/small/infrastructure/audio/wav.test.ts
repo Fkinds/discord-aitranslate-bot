@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { toWav } from '../../../../src/infrastructure/gemini/wav';
+import { toWav } from '../../../../src/infrastructure/audio/wav';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 
 describe('toWav', () => {
