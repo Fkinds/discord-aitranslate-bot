@@ -12,10 +12,12 @@ const KO = LanguageCode.of('ko');
 const JA_KO = TranslationLanguages.of(JA, KO);
 const SPEECH = SpeechAudio.fromPcm(new Uint8Array([1, 2, 3, 4]));
 
-/** Hears what it is told to, or fails with what it is told to. */
+/** Hears what it is told to, or fails with what it is told to, recording the languages it was to tell it among. */
 class FakeRecognizer implements SpeechRecognizer {
   heard: Heard | Error = { text: '', language: null };
-  async recognize(): Promise<Heard> {
+  readonly among: string[][] = [];
+  async recognize(_audio: SpeechAudio, among: readonly LanguageCode[] = []): Promise<Heard> {
+    this.among.push(among.map((language) => language.tag));
     if (this.heard instanceof Error) throw this.heard;
     return this.heard;
   }
@@ -85,6 +87,40 @@ describe('LocalTranslator', () => {
       translations: [],
     });
     expect(textTranslator.requests).toEqual([]);
+  });
+
+  it('has Whisper tell what was said between the two languages of a pair alone', async () => {
+    recognizer.heard = { text: '안녕하세요', language: 'ko' };
+
+    await translator.translate(SPEECH, JA_KO);
+
+    expect(recognizer.among).toEqual([['ja', 'ko']]);
+  });
+
+  it('has Whisper tell what was said among any language with one language, in which anything may be said', async () => {
+    recognizer.heard = { text: 'Hello', language: 'en' };
+
+    await translator.translate(SPEECH, TranslationLanguages.of(JA));
+
+    expect(recognizer.among).toEqual([[]]);
+  });
+
+  it('has Whisper tell among any language for a pair with a language it does not know by that tag', async () => {
+    recognizer.heard = { text: '你好', language: 'zh' };
+
+    await translator.translate(SPEECH, TranslationLanguages.of(JA, LanguageCode.of('zh-TW')));
+
+    expect(recognizer.among).toEqual([[]]);
+  });
+
+  it('takes hangul Whisper heard as another language for Korean, and translates it from Korean', async () => {
+    recognizer.heard = { text: '고마워', language: 'ja' };
+
+    const translation = await translator.translate(SPEECH, JA_KO);
+
+    expect(translation.spokenLanguage).toBe(KO);
+    expect(translation.translations).toEqual([{ language: JA, text: '고마워 in ja' }]);
+    expect(textTranslator.requests).toEqual([{ from: 'ko', into: ['ja'] }]);
   });
 
   it('translates nothing when no speech was heard', async () => {

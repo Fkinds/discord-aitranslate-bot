@@ -16,7 +16,11 @@ export interface Heard {
 
 /** Hears what was said in speech, and in which language. */
 export interface SpeechRecognizer {
-  recognize(audio: SpeechAudio): Promise<Heard>;
+  /**
+   * @param among the languages to tell what was said among; any language the
+   *   recognizer knows when there are none.
+   */
+  recognize(audio: SpeechAudio, among?: readonly LanguageCode[]): Promise<Heard>;
 }
 
 export interface RecognizerOptions {
@@ -83,11 +87,18 @@ export class WhisperRecognizer implements SpeechRecognizer {
     return new WhisperRecognizer(vad, whisper);
   }
 
-  async recognize(audio: SpeechAudio): Promise<Heard> {
+  /**
+   * With languages to tell what was said among, Whisper picks the likeliest
+   * of them alone (sherpa-onnx's `language_candidates`), in the same pass.
+   * They must be languages Whisper knows, by the codes it names them by, such
+   * as those offered in the commands.
+   */
+  async recognize(audio: SpeechAudio, among: readonly LanguageCode[] = []): Promise<Heard> {
     const heard: Array<{ text: string; language: string; samples: number }> = [];
     for (const stretch of this.speechIn(samplesOf(audio))) {
       const stream = this.whisper.createStream();
       stream.setOption('max_tokens_per_second', String(MAX_TOKENS_PER_SECOND));
+      if (among.length > 0) stream.setOption('language_candidates', among.map((language) => language.tag).join(','));
       stream.acceptWaveform({ sampleRate: SpeechAudio.SAMPLE_RATE_HZ, samples: stretch });
       const result = await this.whisper.decodeAsync(stream);
       const text = result.text.trim();

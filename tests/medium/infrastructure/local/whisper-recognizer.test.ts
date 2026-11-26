@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from '@jest/globals';
+import { LanguageCode } from '../../../../src/domain/language-code';
 import { WhisperRecognizer } from '../../../../src/infrastructure/local/whisper-recognizer';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { LOCAL_MODEL_TIMEOUT_MS, localModelsDir } from '../../../support/local-models';
@@ -49,6 +50,17 @@ describe('WhisperRecognizer, with the local models', () => {
 
       expect(heard.language).toBe('ja');
       expect(heard.text).toMatch(/岩田さんの車/);
+    },
+    LOCAL_MODEL_TIMEOUT_MS
+  );
+
+  it(
+    'tells the language among the ones it is given alone',
+    async () => {
+      const [ja, ko, en] = ['ja', 'ko', 'en'].map((tag) => LanguageCode.of(tag)) as [LanguageCode, LanguageCode, LanguageCode];
+
+      expect((await recognizer.recognize(recordedSpeech(), [ja, ko])).language).toBe('ja');
+      expect(['ko', 'en']).toContain((await recognizer.recognize(recordedSpeech(), [ko, en])).language);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
