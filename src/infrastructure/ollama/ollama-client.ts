@@ -20,6 +20,13 @@ export class OllamaRequestFailed extends Error {
   }
 }
 
+/** A step of a download that Ollama reports, such as "pulling manifest", with the bytes of a layer when it has them. */
+export interface PullProgress {
+  readonly status: string;
+  readonly total?: number;
+  readonly completed?: number;
+}
+
 export interface OllamaOptions {
   /** Give up on a request after this long. */
   readonly timeoutMs: number;
@@ -70,20 +77,85 @@ export class OllamaClient {
     return content;
   }
 
-  /** POST the body as JSON, and read the answer as JSON, trying again once when that may help. */
-  private async post(path: string, body: unknown): Promise<unknown> {
+  /**
+   * Whether Ollama has the model, by asking for what it knows of it.
+   * @throws OllamaRequestFailed when Ollama cannot be asked.
+   */
+  async hasModel(model: string): Promise<boolean> {
     try {
-      return await this.postOnce(path, body);
+      await this.post('api/show', { model });
+      return true;
     } catch (error) {
-      if (!mayPass(error)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, this.options.retryDelayMs));
-      return this.postOnce(path, body);
+      if (error instanceof OllamaRequestFailed && error.status === 404) return false;
+      throw error;
     }
   }
 
-  private async postOnce(path: string, body: unknown): Promise<unknown> {
+  /**
+   * Load the model into memory and keep it there, as chat does, so that the
+   * first translation does not wait for it. Loading takes longer than a chat,
+   * so this waits up to `timeoutMs`.
+   *
+   * @throws OllamaRequestFailed
+   */
+  async load(model: string, timeoutMs: number): Promise<void> {
+    await this.post('api/generate', { model, keep_alive: -1 }, timeoutMs);
+  }
+
+  /**
+   * Download the model, or find that it is all there already, telling
+   * `onProgress` of each step Ollama reports. A download stopped part way
+   * goes on from there the next time. It is not given up on after a time,
+   * since it may be gigabytes, nor tried again.
+   *
+   * @throws OllamaRequestFailed when it could not be downloaded.
+   */
+  async pull(model: string, onProgress: (progress: PullProgress) => void): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch(new URL('api/pull', this.base), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model, stream: true }),
+      });
+    } catch (error) {
+      throw new OllamaRequestFailed(`Could not connect to Ollama at ${this.base.href}`, 'unreachable', undefined, { cause: error });
+    }
+    if (!response.ok) {
+      throw new OllamaRequestFailed(`Ollama answered HTTP ${response.status}${reasonIn(await response.text())}`, 'refused', response.status);
+    }
+
+    let succeeded = false;
+    try {
+      for await (const line of linesOf(response.body)) {
+        if (line.trim() === '') continue;
+        const progress = progressIn(line, model);
+        onProgress(progress);
+        if (progress.status === 'success') succeeded = true;
+      }
+    } catch (error) {
+      if (error instanceof OllamaRequestFailed) throw error;
+      throw new OllamaRequestFailed(`Lost the connection to Ollama while pulling ${model}`, 'unreachable', undefined, {
+        cause: error,
+      });
+    }
+    if (!succeeded) throw new OllamaRequestFailed(`Ollama stopped pulling ${model} before it succeeded`, 'unreadable');
+  }
+
+  /** POST the body as JSON, and read the answer as JSON, trying again once when that may help. */
+  private async post(path: string, body: unknown, timeoutMs = this.options.timeoutMs): Promise<unknown> {
+    try {
+      return await this.postOnce(path, body, timeoutMs);
+    } catch (error) {
+      if (!mayPass(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, this.options.retryDelayMs));
+      return this.postOnce(path, body, timeoutMs);
+    }
+  }
+
+  private async postOnce(path: string, body: unknown, timeoutMs: number): Promise<unknown> {
     const url = new URL(path, this.base);
-    const signal = AbortSignal.timeout(this.options.timeoutMs);
+    const signal = AbortSignal.timeout(timeoutMs);
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -105,7 +177,7 @@ export class OllamaClient {
     } catch (error) {
       if (error instanceof OllamaRequestFailed) throw error;
       if (signal.aborted) {
-        throw new OllamaRequestFailed(`Ollama did not answer within ${this.options.timeoutMs} ms`, 'timeout', undefined, {
+        throw new OllamaRequestFailed(`Ollama did not answer within ${timeoutMs} ms`, 'timeout', undefined, {
           cause: error,
         });
       }
@@ -130,4 +202,41 @@ function reasonIn(text: string): string {
   } catch {
     return '';
   }
+}
+
+/** The lines of a stream of text, without their line breaks. */
+async function* linesOf(body: ReadableStream<Uint8Array> | null): AsyncGenerator<string> {
+  if (body === null) return;
+  const decoder = new TextDecoder();
+  let rest = '';
+  for await (const chunk of body) {
+    const lines = (rest + decoder.decode(chunk, { stream: true })).split('\n');
+    rest = lines.pop() ?? '';
+    yield* lines;
+  }
+  rest += decoder.decode();
+  if (rest !== '') yield rest;
+}
+
+/** A step of a pull, from a line of Ollama's answer. @throws OllamaRequestFailed when the line is an error, or not a step. */
+function progressIn(line: string, model: string): PullProgress {
+  let progress: { status?: unknown; total?: unknown; completed?: unknown; error?: unknown } | null;
+  try {
+    progress = JSON.parse(line) as typeof progress;
+  } catch (error) {
+    throw new OllamaRequestFailed(`Ollama answered the pull of ${model} with something other than JSON`, 'unreadable', undefined, {
+      cause: error,
+    });
+  }
+  if (typeof progress?.error === 'string') {
+    throw new OllamaRequestFailed(`Ollama could not pull ${model}: ${progress.error}`, 'refused');
+  }
+  if (typeof progress?.status !== 'string') {
+    throw new OllamaRequestFailed(`Ollama answered the pull of ${model} without a status`, 'unreadable');
+  }
+  return {
+    status: progress.status,
+    ...(typeof progress.total === 'number' ? { total: progress.total } : {}),
+    ...(typeof progress.completed === 'number' ? { completed: progress.completed } : {}),
+  };
 }
