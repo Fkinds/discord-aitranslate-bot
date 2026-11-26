@@ -204,7 +204,8 @@ export class ClaudeTextTranslator implements TextTranslator {
     }
   }
 
-  async translate(text: string, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
+  /** Claude finds the language the text was said in itself, so `from` is not sent. */
+  async translate(text: string, _from: LanguageCode | null, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
     if (into.length === 0) return [];
     let message: Anthropic.Message;
     try {

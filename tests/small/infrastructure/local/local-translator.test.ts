@@ -23,10 +23,10 @@ class FakeRecognizer implements SpeechRecognizer {
 
 /** Translates "<text>" into "<text> in <tag>", recording the languages of each request, or fails with what it is told to. */
 class FakeTextTranslator implements TextTranslator {
-  readonly requests: string[][] = [];
+  readonly requests: Array<{ from: string | null; into: string[] }> = [];
   error: Error | undefined;
-  async translate(text: string, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
-    this.requests.push(into.map((language) => language.tag));
+  async translate(text: string, from: LanguageCode | null, into: readonly LanguageCode[]): Promise<readonly TranslatedText[]> {
+    this.requests.push({ from: from?.tag ?? null, into: into.map((language) => language.tag) });
     if (this.error) throw this.error;
     return into.map((language) => ({ language, text: `${text} in ${language.tag}` }));
   }
@@ -51,6 +51,7 @@ describe('LocalTranslator', () => {
       spokenLanguage: KO,
       translations: [{ language: JA, text: '안녕하세요 in ja' }],
     });
+    expect(textTranslator.requests).toEqual([{ from: 'ko', into: ['ja'] }]);
   });
 
   it("translates what was said in another language into each of the session's, in their order", async () => {
@@ -60,7 +61,19 @@ describe('LocalTranslator', () => {
 
     expect(translation.spokenLanguage).toBeNull();
     expect(translation.translations.map(({ language }) => language)).toEqual([JA, KO]);
-    expect(textTranslator.requests).toEqual([['ja', 'ko']]);
+    expect(textTranslator.requests).toEqual([{ from: 'en', into: ['ja', 'ko'] }]);
+  });
+
+  it.each([
+    ['a language none of the commands offer', 'vi', 'vi'],
+    ['a code that is not a language tag', 'not a tag', null],
+    ['no language', null, null],
+  ])('tells the text translator the language Whisper heard, given %s', async (_, heard, from) => {
+    recognizer.heard = { text: 'Xin chào', language: heard };
+
+    await translator.translate(SPEECH, JA_KO);
+
+    expect(textTranslator.requests).toEqual([{ from, into: ['ja', 'ko'] }]);
   });
 
   it('translates nothing that was said in the one language of the session', async () => {
