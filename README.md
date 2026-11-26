@@ -316,7 +316,7 @@ graph LR
 6. 🌐 **Translate**: The bot sends the text to Claude Haiku 5.5, which translates it into each language that is to be posted (see [What Gets Posted](#what-gets-posted)), and into no other, in one request. A JSON Schema fixes the form of its answer (structured output). Claude is told that the text is only something to translate, so instructions said in the voice channel are translated, not followed. With `TRANSLATOR=translategemma`, TranslateGemma translates it instead (see [With TranslateGemma](#with-translategemma)).
 7. 💬 **Post**: The bot posts what was said and its translations.
 
-The bot works on one utterance at a time, in the order they came; one that waited for others logs how long it waited. On a Mac with an M4 Pro, Whisper takes about 1 second to hear a 3-second utterance; the request to Claude comes on top.
+Whisper hears one utterance at a time, on the CPU, and the translator translates one at a time, so that the next utterance is heard while one is translated; both keep the order the utterances came in, and so do the posts. One that waited for others logs how long it waited. An utterance still waiting 10 seconds after it ended is dropped, with a warning in the log, since a translation that late is no use to the conversation. On a Mac with an M4 Pro, Whisper takes about 1 second to hear a 3-second utterance; the request to Claude comes on top.
 
 ### The Speech Models
 

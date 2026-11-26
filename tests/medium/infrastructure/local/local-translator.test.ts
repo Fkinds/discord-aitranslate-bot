@@ -26,7 +26,7 @@ describe('LocalTranslator, with Whisper and Claude', () => {
   beforeEach(async () => {
     api = await HttpStub.start();
     const claude = new ClaudeTextTranslator('test-key', { timeoutMs: 1_000, maxRetries: 0, baseUrl: api.url }, new FakeLogger());
-    translator = new LocalTranslator(recognizer, claude);
+    translator = new LocalTranslator(recognizer, claude, () => new Date(), new FakeLogger(), { maxWaitMs: 10_000 });
   });
 
   afterEach(async () => {

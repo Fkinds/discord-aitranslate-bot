@@ -5,7 +5,9 @@ import { LocalTranslator } from '../../../../src/infrastructure/local/local-tran
 import type { TextTranslator, TranslatedText } from '../../../../src/infrastructure/local/text-translator';
 import type { Heard, SpeechRecognizer } from '../../../../src/infrastructure/local/whisper-recognizer';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
-import { TranslationFailed } from '../../../../src/usecases/ports/translator';
+import { TranslationAbandoned, TranslationFailed } from '../../../../src/usecases/ports/translator';
+import { deferred } from '../../../support/deferred';
+import { FakeLogger } from '../../../support/fakes/fake-logger';
 
 const JA = LanguageCode.of('ja');
 const KO = LanguageCode.of('ko');
@@ -42,7 +44,7 @@ describe('LocalTranslator', () => {
   beforeEach(() => {
     recognizer = new FakeRecognizer();
     textTranslator = new FakeTextTranslator();
-    translator = new LocalTranslator(recognizer, textTranslator);
+    translator = new LocalTranslator(recognizer, textTranslator, () => new Date(0), new FakeLogger(), { maxWaitMs: 10_000 });
   });
 
   it('translates what was said in one language of a pair into the other only', async () => {
@@ -144,5 +146,163 @@ describe('LocalTranslator', () => {
     await expect(translating).rejects.toThrow(TranslationFailed);
     await expect(translating).rejects.toThrow('Hearing the speech failed: Whisper failed');
     await expect(translating).rejects.toHaveProperty('cause', cause);
+  });
+});
+
+/** A recognizer that hears each utterance when the test says, recording the ones it has started. */
+class StepRecognizer implements SpeechRecognizer {
+  readonly started: number[] = [];
+  readonly finish: Array<ReturnType<typeof deferred<Heard>>> = [];
+  recognize(audio: SpeechAudio): Promise<Heard> {
+    this.started.push(audio.pcm.byteLength);
+    const step = deferred<Heard>();
+    this.finish.push(step);
+    return step.promise;
+  }
+}
+
+/** A text translator that translates each text when the test says, recording the ones it has started. */
+class StepTextTranslator implements TextTranslator {
+  readonly started: string[] = [];
+  readonly finish: Array<ReturnType<typeof deferred<readonly TranslatedText[]>>> = [];
+  translate(text: string): Promise<readonly TranslatedText[]> {
+    this.started.push(text);
+    const step = deferred<readonly TranslatedText[]>();
+    this.finish.push(step);
+    return step.promise;
+  }
+}
+
+/** Let every promise that can settle, settle. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+const speech = (bytes: number) => SpeechAudio.fromPcm(new Uint8Array(bytes));
+const inJapanese = (text: string): Heard => ({ text, language: 'ja' });
+
+describe('LocalTranslator, with utterances one after another', () => {
+  let recognizer: StepRecognizer;
+  let textTranslator: StepTextTranslator;
+  let now: number;
+  let logger: FakeLogger;
+  let translator: LocalTranslator;
+
+  beforeEach(() => {
+    recognizer = new StepRecognizer();
+    textTranslator = new StepTextTranslator();
+    now = 0;
+    logger = new FakeLogger();
+    translator = new LocalTranslator(recognizer, textTranslator, () => new Date(now), logger, { maxWaitMs: 10_000 });
+  });
+
+  it('hears an utterance while the one before it is translated, and hears one at a time', async () => {
+    void translator.translate(speech(2), JA_KO);
+    void translator.translate(speech(4), JA_KO);
+    void translator.translate(speech(6), JA_KO);
+    await settle();
+    expect(recognizer.started).toEqual([2]);
+
+    recognizer.finish[0]!.resolve(inJapanese('first'));
+    await settle();
+
+    expect(textTranslator.started).toEqual(['first']);
+    expect(recognizer.started).toEqual([2, 4]);
+  });
+
+  it('translates one at a time, in the order the utterances came', async () => {
+    const first = translator.translate(speech(2), JA_KO);
+    const second = translator.translate(speech(4), JA_KO);
+    await settle();
+    recognizer.finish[0]!.resolve(inJapanese('first'));
+    await settle();
+    recognizer.finish[1]!.resolve(inJapanese('second'));
+    await settle();
+    expect(textTranslator.started).toEqual(['first']);
+
+    textTranslator.finish[0]!.resolve([{ language: KO, text: '첫째' }]);
+    await settle();
+    expect(textTranslator.started).toEqual(['first', 'second']);
+    textTranslator.finish[1]!.resolve([{ language: KO, text: '둘째' }]);
+
+    expect((await first).translations).toEqual([{ language: KO, text: '첫째' }]);
+    expect((await second).translations).toEqual([{ language: KO, text: '둘째' }]);
+  });
+
+  it('finishes an utterance with nothing to translate only after those before it, so that posts keep their order', async () => {
+    const order: string[] = [];
+    void translator.translate(speech(2), TranslationLanguages.of(JA)).then(() => order.push('Korean'));
+    void translator.translate(speech(4), TranslationLanguages.of(JA)).then(() => order.push('Japanese'));
+    await settle();
+    recognizer.finish[0]!.resolve({ text: '안녕', language: 'ko' });
+    await settle();
+    recognizer.finish[1]!.resolve(inJapanese('こんにちは'));
+    await settle();
+    expect(order).toEqual([]);
+
+    textTranslator.finish[0]!.resolve([{ language: JA, text: 'こんにちは' }]);
+    await settle();
+
+    expect(order).toEqual(['Korean', 'Japanese']);
+  });
+
+  it('gives up on an utterance that waited too long to be heard, without hearing it', async () => {
+    void translator.translate(speech(2), JA_KO);
+    const late = translator.translate(speech(4), JA_KO);
+    await settle();
+
+    now = 10_000;
+    recognizer.finish[0]!.resolve({ text: '', language: null });
+
+    await expect(late).rejects.toEqual(new TranslationAbandoned(10_000));
+    expect(recognizer.started).toEqual([2]);
+  });
+
+  it('gives up on an utterance that waited too long to be translated, without translating it', async () => {
+    void translator.translate(speech(2), JA_KO);
+    const late = translator.translate(speech(4), JA_KO);
+    await settle();
+    recognizer.finish[0]!.resolve(inJapanese('first'));
+    await settle();
+    recognizer.finish[1]!.resolve(inJapanese('second'));
+    await settle();
+
+    now = 12_000;
+    textTranslator.finish[0]!.resolve([{ language: KO, text: '첫째' }]);
+
+    await expect(late).rejects.toThrow(TranslationAbandoned);
+    expect(textTranslator.started).toEqual(['first']);
+  });
+
+  it('goes on to the next utterance after one fails', async () => {
+    const failing = translator.translate(speech(2), JA_KO);
+    const next = translator.translate(speech(4), JA_KO);
+    await settle();
+
+    recognizer.finish[0]!.reject(new Error('Whisper failed'));
+    await expect(failing).rejects.toThrow(TranslationFailed);
+    await settle();
+    recognizer.finish[1]!.resolve({ text: '', language: null });
+
+    await expect(next).resolves.toEqual({ original: '', spokenLanguage: null, translations: [] });
+  });
+
+  it('logs how long an utterance waited to be heard, and to be translated', async () => {
+    void translator.translate(speech(2), JA_KO);
+    now = 300;
+    void translator.translate(speech(4), JA_KO);
+    await settle();
+
+    now = 1_000;
+    recognizer.finish[0]!.resolve(inJapanese('first'));
+    await settle();
+    now = 1_500;
+    recognizer.finish[1]!.resolve(inJapanese('second'));
+    await settle();
+    now = 3_000;
+    textTranslator.finish[0]!.resolve([{ language: KO, text: '첫째' }]);
+    await settle();
+
+    expect(logger.entries).toEqual([
+      { level: 'info', message: 'Hearing an utterance after waiting for those before it', meta: { waitedMs: 700 } },
+      { level: 'info', message: 'Translating an utterance after waiting for those before it', meta: { waitedMs: 1_500 } },
+    ]);
   });
 });
