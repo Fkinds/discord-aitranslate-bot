@@ -10,7 +10,6 @@ import { GeminiTranslator, geminiModel } from './infrastructure/gemini/gemini-tr
 import { LocalTranslator } from './infrastructure/local/local-translator';
 import { missingModelFiles } from './infrastructure/local/model-download';
 import { LOCAL_MODEL_FILES, type ModelFile } from './infrastructure/local/model-files';
-import { OneAtATime } from './infrastructure/local/one-at-a-time';
 import { WhisperRecognizer } from './infrastructure/local/whisper-recognizer';
 import { OllamaClient, OllamaRequestFailed } from './infrastructure/ollama/ollama-client';
 import { isOnThisMachine } from './infrastructure/ollama/ollama-host';
@@ -33,6 +32,9 @@ import { TranslateUtterance } from './usecases/translate-utterance';
 
 /** The CPU threads Whisper uses on this machine. */
 const LOCAL_THREADS = 4;
+
+/** Give up on an utterance that has waited this long since it ended: a later translation is no use to the conversation (#119). */
+const LOCAL_OPTIONS = { maxWaitMs: 10_000 };
 
 /** How long a request to Ollama may take, and how long to wait before trying one again (#86). */
 const OLLAMA_OPTIONS = { timeoutMs: 15_000, retryDelayMs: 1_000 };
@@ -132,11 +134,12 @@ async function loadWhisper(modelsDir: string, logger: Logger): Promise<WhisperRe
  *
  * With Claude, the bot stops at startup when the models are missing or Claude
  * cannot be called, and Whisper loads its models now, so that the first
- * utterance does not wait for them; the utterances are taken one at a time. Each Claude and Gemini request may take
- * 15 s. Claude's SDK tries a failure that may pass
- * again, up to 3 attempts in all. A transient Gemini failure is tried again up
- * to 3 attempts in all, 1 s and then 2 s apart, or after the wait Gemini asks
- * for when that is at most 5 s.
+ * utterance does not wait for them. Whisper hears one utterance while the one
+ * before it is translated, and one that has waited 10 s is given up on
+ * (LocalTranslator). Each Claude and Gemini request may take 15 s. Claude's
+ * SDK tries a failure that may pass again, up to 3 attempts in all. A
+ * transient Gemini failure is tried again up to 3 attempts in all, 1 s and
+ * then 2 s apart, or after the wait Gemini asks for when that is at most 5 s.
  *
  * With TranslateGemma, it is the same, but that the bot stops when Ollama does
  * not have the model, and loads it. Each request to Ollama may take 15 s; one
@@ -152,7 +155,7 @@ export async function translatorFor(config: TranslatorConfig, logger: Logger, cl
       const claude = new ClaudeTextTranslator(config.apiKey, { timeoutMs: 15_000, maxRetries: 2 }, logger);
       await requireClaude(claude, logger);
       const recognizer = await loadWhisper(config.modelsDir, logger);
-      return new OneAtATime(new LocalTranslator(recognizer, claude), clock, logger);
+      return new LocalTranslator(recognizer, claude, clock, logger, LOCAL_OPTIONS);
     }
     case 'translategemma': {
       await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
@@ -160,7 +163,7 @@ export async function translatorFor(config: TranslatorConfig, logger: Logger, cl
       await requireTranslateGemma(ollama, config.model, logger);
       const recognizer = await loadWhisper(config.modelsDir, logger);
       const translateGemma = new TranslateGemmaTextTranslator(ollama, config.model, logger);
-      return new OneAtATime(new LocalTranslator(recognizer, translateGemma), clock, logger);
+      return new LocalTranslator(recognizer, translateGemma, clock, logger, LOCAL_OPTIONS);
     }
     case 'gemini':
       return new GeminiTranslator(

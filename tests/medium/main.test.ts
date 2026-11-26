@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ClaudeTextTranslator, CREDENTIALS_HINT } from '../../src/infrastructure/claude/claude-text-translator';
-import { OneAtATime } from '../../src/infrastructure/local/one-at-a-time';
+import { LocalTranslator } from '../../src/infrastructure/local/local-translator';
 import { OllamaClient } from '../../src/infrastructure/ollama/ollama-client';
 import { requireClaude, requireTranslateGemma, translatorFor } from '../../src/main';
 import { FakeLogger } from '../support/fakes/fake-logger';
@@ -122,7 +122,7 @@ describe('translatorFor, with TRANSLATOR=claude', () => {
 
       const translator = await translatorFor({ kind: 'claude', apiKey: 'key', modelsDir: localModelsDir() }, logger);
 
-      expect(translator).toBeInstanceOf(OneAtATime);
+      expect(translator).toBeInstanceOf(LocalTranslator);
       expect(logger.messages('info')).toEqual([
         'Calling Claude',
         'Claude can be called',
@@ -259,7 +259,7 @@ describe('translatorFor, with TRANSLATOR=translategemma', () => {
 
       const translator = await translatorFor(config(localModelsDir()), logger);
 
-      expect(translator).toBeInstanceOf(OneAtATime);
+      expect(translator).toBeInstanceOf(LocalTranslator);
       expect(logger.messages('info')).toEqual([
         'Checking that Ollama has TranslateGemma',
         'Loading TranslateGemma',
@@ -281,7 +281,7 @@ describe('translatorFor, with TRANSLATOR=translategemma', () => {
 
       const translator = await translatorFor(stopped, logger);
 
-      expect(translator).toBeInstanceOf(OneAtATime);
+      expect(translator).toBeInstanceOf(LocalTranslator);
       expect(logger.messages('warn')).toEqual([
         'Could not check that Ollama has TranslateGemma; going on, and translations fail until it can be',
       ]);
