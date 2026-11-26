@@ -22,7 +22,7 @@ A Discord bot that listens in a voice channel and posts what is said there, tran
 - 🌐 **Translated by Claude**: Claude Haiku 5.5 translates the text into every language to post in one request, keeping names and the speaker's tone
 - 🆓 **Or for free, on your machine**: `TRANSLATOR=translategemma` has Google's TranslateGemma translate the text on [Ollama](https://ollama.com/), so nothing is paid, and with Ollama on the same machine, nothing leaves it
 - ☁️ **Or with Gemini**: `TRANSLATOR=gemini` sends each utterance to Google Gemini instead, which takes any language
-- 🔁 **Language pairs**: Translate between two languages both ways: what is said in one is translated into the other, and anything else into both
+- 🔁 **Language pairs**: Translate between two languages both ways: what is said in one is translated into the other. With Gemini, anything else is translated into both
 - 🔍 **Automatic language detection**: The bot tells which language was spoken, so nobody has to set the language they speak
 - 💬 **What was said, and its translation**: Each post shows what was said under the speaker's name, with its translations quoted below
 - 📣 **Open about where speech goes**: When translation starts, everyone in the text channel is told where what is said goes
@@ -270,7 +270,7 @@ Which translations are posted depends on the language that was spoken:
 |-----------|-----------|--------|
 | Japanese ⇄ Korean | Korean | What was said, and its Japanese translation |
 | Japanese ⇄ Korean | Japanese | What was said, and its Korean translation |
-| Japanese ⇄ Korean | English | What was said, and both translations |
+| Japanese ⇄ Korean | English | With Gemini, what was said, and both translations. With Claude or TranslateGemma, Whisper hears only Japanese or Korean in this session ([How It Works](#-how-it-works)) |
 | Japanese | English | What was said, and its Japanese translation |
 | Japanese | Japanese | Only what was said |
 
@@ -312,7 +312,7 @@ graph LR
 2. 🎙️ **Listen**: Discord tells the bot who is speaking. The bot records each member's utterance until they have been silent for 300 ms.
 3. 🎵 **Convert**: The Opus audio is decoded and converted to 16 kHz mono.
 4. 🔇 **Find the speech**: Silero VAD finds the stretches of speech. Silence and noise, in which Whisper is known to hear words nobody said, are left out; an utterance with no speech is not posted.
-5. 👂 **Transcribe**: Whisper large-v3-turbo writes down what was said in each stretch, and tells the language: one of the session's, or another.
+5. 👂 **Transcribe**: Whisper large-v3-turbo writes down what was said in each stretch, and tells the language. With a pair of languages, it tells only between those two, since it often takes a short utterance for a third language; with one language, it tells among all it knows. Hangul then makes it Korean, and kana Japanese, whatever Whisper said.
 6. 🌐 **Translate**: The bot sends the text to Claude Haiku 5.5, which translates it into each language that is to be posted (see [What Gets Posted](#what-gets-posted)), and into no other, in one request. A JSON Schema fixes the form of its answer (structured output). Claude is told that the text is only something to translate, so instructions said in the voice channel are translated, not followed. With `TRANSLATOR=translategemma`, TranslateGemma translates it instead (see [With TranslateGemma](#with-translategemma)).
 7. 💬 **Post**: The bot posts what was said and its translations.
 
