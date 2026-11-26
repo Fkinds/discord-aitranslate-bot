@@ -4,7 +4,7 @@ import { LanguageCode } from '../../../src/domain/language-code';
 import { TranslationLanguages } from '../../../src/domain/translation-languages';
 import { SpeechAudio } from '../../../src/usecases/ports/speech-audio';
 import { PublishFailed, type TranslationPost } from '../../../src/usecases/ports/translation-publisher';
-import { TranslationFailed } from '../../../src/usecases/ports/translator';
+import { TranslationAbandoned, TranslationFailed } from '../../../src/usecases/ports/translator';
 import { SessionStore } from '../../../src/usecases/session-store';
 import { TranslateUtterance } from '../../../src/usecases/translate-utterance';
 import { aSession } from '../../support/builders';
@@ -164,6 +164,16 @@ describe('TranslateUtterance', () => {
     translator.failNext(new TranslationFailed('quota exceeded'));
 
     await expect(translateUtterance.execute(utterance())).rejects.toThrow(TranslationFailed);
+    expect(publisher.posts).toEqual([]);
+  });
+
+  it('posts nothing for an utterance the translator gave up on for waiting too long', async () => {
+    sessions.save(aSession());
+    translator.failNext(new TranslationAbandoned(12_000));
+
+    const result = await translateUtterance.execute(utterance());
+
+    expect(result).toEqual({ kind: 'abandoned', waitedMs: 12_000 });
     expect(publisher.posts).toEqual([]);
   });
 
