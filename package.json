@@ -10,6 +10,7 @@
     "watch": "tsc -w",
     "deploy-commands": "ts-node src/deploy-commands.ts",
     "models:download": "ts-node src/download-models.ts",
+    "eval:speech": "ts-node --files src/evaluate-speech.ts",
     "test": "jest --selectProjects small",
     "test:small": "jest --selectProjects small",
     "test:medium": "jest --selectProjects medium --runInBand",

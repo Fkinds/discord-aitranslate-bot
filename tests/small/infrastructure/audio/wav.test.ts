@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { toWav } from '../../../../src/infrastructure/audio/wav';
+import { fromWav, toWav } from '../../../../src/infrastructure/audio/wav';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 
 describe('toWav', () => {
@@ -27,5 +27,32 @@ describe('toWav', () => {
   it('puts the samples after the header, unchanged', () => {
     expect(wav.length).toBe(44 + samples.length);
     expect([...wav.subarray(44)]).toEqual([...samples]);
+  });
+});
+
+describe('fromWav', () => {
+  const speech = SpeechAudio.fromPcm(Uint8Array.from([0x01, 0x02, 0x03, 0x04]));
+
+  it('reads back the speech toWav wrote', () => {
+    expect([...fromWav(toWav(speech)).pcm]).toEqual([0x01, 0x02, 0x03, 0x04]);
+  });
+
+  it('skips a chunk other than "fmt " and "data"', () => {
+    const wav = toWav(speech);
+    const list = Buffer.concat([Buffer.from('LIST'), Buffer.from([3, 0, 0, 0]), Buffer.from('abc'), Buffer.from([0])]);
+    const withList = Buffer.concat([wav.subarray(0, 36), list, wav.subarray(36)]);
+
+    expect([...fromWav(withList).pcm]).toEqual([0x01, 0x02, 0x03, 0x04]);
+  });
+
+  it('refuses another format, saying what it got', () => {
+    const stereo = toWav(speech);
+    stereo.writeUInt16LE(2, 22);
+
+    expect(() => fromWav(stereo)).toThrow('got 1,2,16000,16');
+  });
+
+  it('refuses what is not a WAVE file', () => {
+    expect(() => fromWav(Buffer.from('not a WAVE file at all'))).toThrow('Not a WAVE file');
   });
 });

@@ -412,6 +412,7 @@ The speech models for Whisper are not in `MODELS_DIR`:
 |---------|--------------|
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
 | `pnpm models:download` | Download the speech models into `MODELS_DIR`, and check them; with `TRANSLATOR=translategemma`, have Ollama pull the model too |
+| `pnpm eval:speech <dir>` | Measure how well Whisper hears recorded utterances (see [Measuring Transcription](#measuring-transcription)) |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
 | `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download` first |
 | `pnpm test:watch` | Run the small tests again on every change |
@@ -428,6 +429,22 @@ Tests are sorted by what they depend on, not by how long they take:
 | Medium | This machine only: servers on localhost, such as stand-ins for the Claude, Gemini, Ollama and Discord APIs, and the speech models | `tests/medium/` | In CI, after the small tests pass |
 
 The test environment holds tests to this: a small test that opens a connection, or a medium test that connects to anything but localhost, fails. A test file outside these directories stops the run. CI runs the tests on Node.js 22, 24 and 26, and its `ci` check must pass before a pull request can be merged. No test calls the real Claude or Gemini API, or a real Ollama: the medium tests run their adapters against stand-ins on localhost.
+
+### Measuring Transcription
+
+To tell whether a change makes the bot hear better, measure it on recordings of real speech, as Discord sends it:
+
+1. Write the sentences to read in `sentences.tsv`, in a directory outside the repository: one a line, the language and the text separated by a tab, such as `ja` and `ちょっと待って`.
+2. Set `RECORD_SPEECH_OF` to your Discord user ID and `RECORDINGS_DIR` to that directory, and start the bot. It records your utterances alone.
+3. Run `/translate-join` with the languages of the sentences, and read them out in order, leaving 3 seconds or more between sentences.
+4. Run `pnpm eval:speech <dir>`. It groups the recordings into sentences by the pauses between them (`--gap-ms`, 1500 by default), and stops if their count is not that of the sentences. The pair of languages is that of the sentences; for sentences in one language, read by one speaker, give the session's pair with `--pair`, such as `--pair ja,ko`.
+
+For each sentence, it shows what Whisper heard, three ways:
+- **pair:** as the bot hears it: each utterance, between the two languages, corrected by the letters.
+- **any:** each utterance among every language Whisper knows, as before #119.
+- **whole:** the sentence as one utterance.
+
+For each way, it gives the character error rate, the sentences heard in the right language, and the time it took for each second of speech. The character error rate ignores spaces and punctuation, but counts kana written as kanji, such as 行きました for いきました, as errors.
 
 ### Dependency Updates
 
@@ -450,6 +467,8 @@ src/
 ├── infrastructure/      # The ports' implementations, the settings and the logger
 │   ├── discord/         # Joining voice channels, receiving speech, posting
 │   ├── claude/          # Translating with Claude
+│   ├── audio/           # WAVE files
+│   ├── evaluation/      # The character error rate, and the recordings to measure with
 │   ├── local/           # Hearing speech on this machine, and downloading the models
 │   ├── ollama/          # Calling Ollama, and reading OLLAMA_HOST
 │   ├── translategemma/  # Translating with TranslateGemma: prompts, and checking what it answers
@@ -458,7 +477,8 @@ src/
 │   └── discord/
 ├── main.ts              # Builds the bot and wires it to Discord
 ├── deploy-commands.ts   # Registers the slash commands
-└── download-models.ts   # Downloads the speech models
+├── download-models.ts   # Downloads the speech models
+└── evaluate-speech.ts   # Measures how well Whisper hears recorded utterances
 
 tests/
 ├── small/               # Laid out like src/
@@ -477,7 +497,7 @@ The code follows Clean Architecture. [dependency-cruiser](https://github.com/sve
 | `usecases` | `domain` |
 | `infrastructure` | `domain`, `usecases`, packages and Node.js |
 | `interfaces` | `domain`, `usecases`, packages and Node.js |
-| `main.ts`, `deploy-commands.ts`, `download-models.ts` | Everything; nothing depends on them |
+| `main.ts`, `deploy-commands.ts`, `download-models.ts`, `evaluate-speech.ts` | Everything; nothing depends on them |
 
 - The use cases give their outcomes as values, such as `started` or `alreadyRunning`; exceptions are for technical failures.
 - The translator, the voice connection and the publisher are ports, so the tests run the use cases with fakes.

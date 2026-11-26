@@ -30,3 +30,33 @@ export function toWav(audio: SpeechAudio): Buffer {
 
   return Buffer.concat([header, audio.pcm]);
 }
+
+/**
+ * The speech in a WAVE file of linear PCM, 16-bit, mono, at 16 kHz, as toWav
+ * writes it, skipping any chunk but "fmt " and "data".
+ *
+ * @throws RangeError for any other file.
+ */
+export function fromWav(wav: Buffer): SpeechAudio {
+  if (wav.toString('ascii', 0, 4) !== 'RIFF' || wav.toString('ascii', 8, 12) !== 'WAVE') {
+    throw new RangeError('Not a WAVE file');
+  }
+  let format: string | undefined;
+  for (let offset = 12; offset + 8 <= wav.length; ) {
+    const id = wav.toString('ascii', offset, offset + 4);
+    const size = wav.readUInt32LE(offset + 4);
+    const body = offset + 8;
+    if (id === 'fmt ') {
+      format = [wav.readUInt16LE(body), wav.readUInt16LE(body + 2), wav.readUInt32LE(body + 4), wav.readUInt16LE(body + 14)].join(',');
+    }
+    if (id === 'data') {
+      const expected = [PCM_FORMAT, SpeechAudio.CHANNELS, SpeechAudio.SAMPLE_RATE_HZ, SpeechAudio.BITS_PER_SAMPLE].join(',');
+      if (format !== expected) {
+        throw new RangeError(`Expected 16-bit mono linear PCM at 16 kHz (format, channels, rate, bits ${expected}), got ${format}`);
+      }
+      return SpeechAudio.fromPcm(wav.subarray(body, body + size));
+    }
+    offset = body + size + (size % 2);
+  }
+  throw new RangeError('No data chunk in the WAVE file');
+}
