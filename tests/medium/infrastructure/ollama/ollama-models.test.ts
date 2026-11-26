@@ -70,6 +70,18 @@ describe('OllamaClient, for the model', () => {
     });
   });
 
+  describe('unload', () => {
+    it('takes the model out of memory, with no prompt and no time to keep it', async () => {
+      ollama.respond({ status: 200, body: { model: MODEL, response: '', done: true, done_reason: 'unload' } });
+
+      await client.unload(MODEL);
+
+      expect(ollama.requests.map(({ url, body }) => [url, JSON.parse(body)])).toEqual([
+        ['/api/generate', { model: MODEL, keep_alive: 0 }],
+      ]);
+    });
+  });
+
   describe('pull', () => {
     it("pulls the model, telling of each step Ollama reports, with a layer's bytes", async () => {
       ollama.respond(

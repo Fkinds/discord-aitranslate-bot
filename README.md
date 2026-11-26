@@ -413,6 +413,7 @@ The speech models for Whisper are not in `MODELS_DIR`:
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
 | `pnpm models:download` | Download the speech models into `MODELS_DIR`, and check them; with `TRANSLATOR=translategemma`, have Ollama pull the model too |
 | `pnpm eval:speech <dir>` | Measure how well Whisper hears recorded utterances (see [Measuring Transcription](#measuring-transcription)) |
+| `pnpm eval:translation <dir>` | Have several models on Ollama translate the same sentences, to judge them blind (see [Comparing Translations](#comparing-translations)) |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
 | `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download` first |
 | `pnpm test:watch` | Run the small tests again on every change |
@@ -446,6 +447,22 @@ For each sentence, it shows what Whisper heard, three ways:
 
 For each way, it gives the character error rate, the sentences heard in the right language, and the time it took for each second of speech. The character error rate ignores spaces and punctuation, but counts kana written as kanji, such as 行きました for いきました, as errors.
 
+### Comparing Translations
+
+To choose the model that translates, have several translate the same sentences, and judge them without knowing which is which:
+
+```bash
+pnpm eval:translation <dir> [--models translategemma:12b,gemma4:12b-it-qat] [--back]
+```
+
+- **The sentences:** it takes those of `<dir>/sentences.tsv`, in two languages, and translates each into the other one.
+- **The models:** by default, TranslateGemma 12B as the bot runs it, the same at Q8 (`translategemma:12b-it-q8_0`), and Gemma 4 12B (`gemma4:12b-it-qat`), prompted to translate as the bot asks. Ollama must have them: `ollama pull <model>`.
+- **What it writes:**
+  - `translations.md`: each sentence with its translations as A, B, C, in an order shuffled for each sentence, to judge.
+  - `translations-key.md`: which model each letter is, the median time a sentence took, and how often TranslateGemma's translation looked wrong.
+- **`--back`:** translates each translation back with TranslateGemma 12B, for someone who reads only the language it came from. It is a rough check.
+- **Memory:** it loads the models one at a time, and takes each out of memory when done, the bot's too. The bot's next translation then loads its model again first.
+
 ### Dependency Updates
 
 [Renovate](https://docs.renovatebot.com/) keeps the dependencies up to date (`renovate.json`). It waits 3 days after an npm release before proposing it. Minor and patch updates of packages at 1.0 or later, and updates of the GitHub Actions, are merged once the `ci` check passes. Major updates, updates of packages at 0.x, pinning and the weekly lock file maintenance wait for a person. `@types/node` stays at 22.x, the oldest Node.js release line the bot supports, and TypeScript below 7, until the test tools support it. The local models are not updated by Renovate: their versions are fixed in `src/infrastructure/local/model-files.ts`.
@@ -478,7 +495,8 @@ src/
 ├── main.ts              # Builds the bot and wires it to Discord
 ├── deploy-commands.ts   # Registers the slash commands
 ├── download-models.ts   # Downloads the speech models
-└── evaluate-speech.ts   # Measures how well Whisper hears recorded utterances
+├── evaluate-speech.ts   # Measures how well Whisper hears recorded utterances
+└── evaluate-translation.ts  # Has several models translate the same sentences, to judge blind
 
 tests/
 ├── small/               # Laid out like src/
@@ -497,7 +515,7 @@ The code follows Clean Architecture. [dependency-cruiser](https://github.com/sve
 | `usecases` | `domain` |
 | `infrastructure` | `domain`, `usecases`, packages and Node.js |
 | `interfaces` | `domain`, `usecases`, packages and Node.js |
-| `main.ts`, `deploy-commands.ts`, `download-models.ts`, `evaluate-speech.ts` | Everything; nothing depends on them |
+| `main.ts`, `deploy-commands.ts`, `download-models.ts`, `evaluate-speech.ts`, `evaluate-translation.ts` | Everything; nothing depends on them |
 
 - The use cases give their outcomes as values, such as `started` or `alreadyRunning`; exceptions are for technical failures.
 - The translator, the voice connection and the publisher are ports, so the tests run the use cases with fakes.
