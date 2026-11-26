@@ -33,17 +33,22 @@ export interface DiscordVoiceOptions {
   readonly readyTimeoutMs: number;
   /** How long a dropped connection has to start reconnecting before it counts as lost. */
   readonly reconnectTimeoutMs: number;
-  /** How long a member must be silent for their utterance to end. */
+  /**
+   * How long a member must be silent for their utterance to end. The pauses
+   * people take within a sentence are longer than 300 ms, which cut sentences
+   * into pieces Whisper misheard, and too many for the bot to keep up with
+   * (#119).
+   */
   readonly silenceMs: number;
 }
 
-/** The values the bot has always used. */
+/** The values the bot uses. */
 export const DEFAULT_VOICE_OPTIONS: DiscordVoiceOptions = {
   selfDeaf: true,
   selfMute: false,
   readyTimeoutMs: 10_000,
   reconnectTimeoutMs: 5_000,
-  silenceMs: 300,
+  silenceMs: 800,
 };
 
 /** Joins and leaves Discord voice channels, and tells the listener what it hears there. */

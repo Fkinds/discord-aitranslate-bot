@@ -17,7 +17,7 @@ A Discord bot that listens in a voice channel and posts what is said there, tran
 
 ## ✨ Features
 
-- 🎙️ **Voice translation**: Each utterance in the voice channel is transcribed and translated once the speaker pauses for 300 ms
+- 🎙️ **Voice translation**: Each utterance in the voice channel is transcribed and translated once the speaker pauses for 800 ms
 - 👂 **Hears on your own machine**: By default, Whisper transcribes on the machine the bot runs on, so the voices go nowhere else
 - 🌐 **Translated by Claude**: Claude Haiku 5.5 translates the text into every language to post in one request, keeping names and the speaker's tone
 - 🆓 **Or for free, on your machine**: `TRANSLATOR=translategemma` has Google's TranslateGemma translate the text on [Ollama](https://ollama.com/), so nothing is paid, and with Ollama on the same machine, nothing leaves it
@@ -300,7 +300,7 @@ An empty variable counts as unset. A missing or malformed setting stops the bot 
 
 ```mermaid
 graph LR
-    A[Member speaks in the voice channel] --> B[Utterance recorded until 300 ms of silence]
+    A[Member speaks in the voice channel] --> B[Utterance recorded until 800 ms of silence]
     B --> C[Decoded and converted to 16 kHz mono]
     C --> D[Silero VAD: the stretches of speech]
     D --> E[Whisper: what was said, and in which language]
@@ -309,7 +309,7 @@ graph LR
 ```
 
 1. 🎤 **Join**: A member runs `/translate-join`, and the bot joins their voice channel.
-2. 🎙️ **Listen**: Discord tells the bot who is speaking. The bot records each member's utterance until they have been silent for 300 ms.
+2. 🎙️ **Listen**: Discord tells the bot who is speaking. The bot records each member's utterance until they have been silent for 800 ms, so that a pause within a sentence does not cut it in two.
 3. 🎵 **Convert**: The Opus audio is decoded and converted to 16 kHz mono.
 4. 🔇 **Find the speech**: Silero VAD finds the stretches of speech. Silence and noise, in which Whisper is known to hear words nobody said, are left out; an utterance with no speech is not posted.
 5. 👂 **Transcribe**: Whisper large-v3-turbo writes down what was said in each stretch, and tells the language. With a pair of languages, it tells only between those two, since it often takes a short utterance for a third language; with one language, it tells among all it knows. Hangul then makes it Korean, and kana Japanese, whatever Whisper said.
