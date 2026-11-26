@@ -5,7 +5,7 @@ import type { SpeechAudio } from '../../usecases/ports/speech-audio';
 import { type SpeechTranslation, TranslationFailed, type Translator } from '../../usecases/ports/translator';
 import { answerSchemaFor, instructionsFor, readAnswer } from './gemini-answer';
 import { classifyFailure } from './gemini-failure';
-import { toWav } from './wav';
+import { toWav } from '../audio/wav';
 
 /** The Gemini model, as this adapter uses it: parts in, the answer's text out, as JSON in the given schema. */
 export interface GeminiModel {

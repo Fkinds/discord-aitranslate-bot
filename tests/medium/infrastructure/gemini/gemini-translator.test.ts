@@ -3,7 +3,7 @@ import { LanguageCode } from '../../../../src/domain/language-code';
 import { TranslationLanguages } from '../../../../src/domain/translation-languages';
 import { answerSchemaFor, instructionsFor } from '../../../../src/infrastructure/gemini/gemini-answer';
 import { GeminiTranslator, geminiModel } from '../../../../src/infrastructure/gemini/gemini-translator';
-import { toWav } from '../../../../src/infrastructure/gemini/wav';
+import { toWav } from '../../../../src/infrastructure/audio/wav';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
 import { FakeLogger } from '../../../support/fakes/fake-logger';
