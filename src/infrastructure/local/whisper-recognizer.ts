@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { OfflineRecognizer, Vad } from 'sherpa-onnx-node';
-import type { LanguageCode } from '../../domain/language-code';
+import { LanguageCode } from '../../domain/language-code';
+import { DomainError } from '../../domain/shared/domain-error';
 import type { TranslationLanguages } from '../../domain/translation-languages';
 import { SpeechAudio } from '../../usecases/ports/speech-audio';
 import { VAD_MODEL, WHISPER_MODEL, type ModelFile } from './model-files';
@@ -122,4 +123,15 @@ export function samplesOf(audio: SpeechAudio): Float32Array {
  */
 export function spokenLanguageAmong(languages: TranslationLanguages, heard: string | null): LanguageCode | null {
   return languages.languages.find((language) => language.tag === heard) ?? null;
+}
+
+/** The language Whisper heard, by its code; null when it is not known, or the code is not a language tag. */
+export function languageHeard(heard: string | null): LanguageCode | null {
+  if (heard === null) return null;
+  try {
+    return LanguageCode.of(heard);
+  } catch (error) {
+    if (error instanceof DomainError) return null;
+    throw error;
+  }
 }

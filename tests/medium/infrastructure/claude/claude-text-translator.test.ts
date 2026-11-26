@@ -12,6 +12,7 @@ import { TranslationFailed } from '../../../../src/usecases/ports/translator';
 import { FakeLogger } from '../../../support/fakes/fake-logger';
 import { HttpStub, type StubResponse } from '../../../support/http-stub';
 
+const JA = LanguageCode.of('ja');
 const KO = LanguageCode.of('ko');
 const EN = LanguageCode.of('en');
 const TEXT = '私たちは岩田さんの車でいきました。';
@@ -56,7 +57,7 @@ describe('ClaudeTextTranslator over HTTP', () => {
   it('sends the request with the API key to the Messages API, and reads the translations', async () => {
     api.respond(REPLY);
 
-    const translations = await translator.translate(TEXT, [KO, EN]);
+    const translations = await translator.translate(TEXT, JA, [KO, EN]);
 
     expect(translations).toEqual([
       { language: KO, text: '우리는 이와타 씨의 차를 타고 갔습니다.' },
@@ -75,35 +76,35 @@ describe('ClaudeTextTranslator over HTTP', () => {
   });
 
   it('sends nothing when there is no language to translate into', async () => {
-    expect(await translator.translate(TEXT, [])).toEqual([]);
+    expect(await translator.translate(TEXT, JA, [])).toEqual([]);
     expect(api.requests).toEqual([]);
   });
 
   it('tries again after a server error', async () => {
     api.respond(failure(529, 'overloaded_error'), REPLY);
 
-    await expect(translator.translate(TEXT, [KO, EN])).resolves.toHaveLength(2);
+    await expect(translator.translate(TEXT, JA, [KO, EN])).resolves.toHaveLength(2);
     expect(api.requests).toHaveLength(2);
   });
 
   it('abandons a request that takes too long, and tries again', async () => {
     api.respond({ ...REPLY, delayMs: 1_000 }, REPLY);
 
-    await expect(translator.translate(TEXT, [KO, EN])).resolves.toHaveLength(2);
+    await expect(translator.translate(TEXT, JA, [KO, EN])).resolves.toHaveLength(2);
     expect(api.requests).toHaveLength(2);
   });
 
   it('gives up after 3 attempts', async () => {
     api.respond(failure(500, 'api_error'), failure(500, 'api_error'), failure(500, 'api_error'));
 
-    await expect(translator.translate(TEXT, [KO])).rejects.toThrow('Translating with Claude failed: HTTP 500 (api_error)');
+    await expect(translator.translate(TEXT, JA, [KO])).rejects.toThrow('Translating with Claude failed: HTTP 500 (api_error)');
     expect(api.requests).toHaveLength(3);
   });
 
   it('gives up at once on HTTP 400', async () => {
     api.respond(failure(400, 'invalid_request_error'));
 
-    const error = await translator.translate(TEXT, [KO]).catch((e: unknown) => e);
+    const error = await translator.translate(TEXT, JA, [KO]).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(TranslationFailed);
     expect((error as Error).message).toBe('Translating with Claude failed: HTTP 400 (invalid_request_error)');
@@ -113,7 +114,7 @@ describe('ClaudeTextTranslator over HTTP', () => {
   it('gives up at once on HTTP 401, saying what to do', async () => {
     api.respond(failure(401, 'authentication_error'));
 
-    await expect(translator.translate(TEXT, [KO])).rejects.toThrow(
+    await expect(translator.translate(TEXT, JA, [KO])).rejects.toThrow(
       `Translating with Claude failed: HTTP 401 (authentication_error): ${CREDENTIALS_HINT}`
     );
     expect(api.requests).toHaveLength(1);
@@ -232,7 +233,7 @@ describe('ClaudeTextTranslator without an API key', () => {
     const translator = aTranslator();
 
     expect(await translator.credentials()).toEqual({ kind: 'sign-in', workspaceId: 'wrkspc_test' });
-    await expect(translator.translate(TEXT, [KO, EN])).resolves.toHaveLength(2);
+    await expect(translator.translate(TEXT, JA, [KO, EN])).resolves.toHaveLength(2);
     expect(api.requests[0]?.headers.authorization).toBe('Bearer signed-in-token');
   });
 
