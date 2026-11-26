@@ -57,6 +57,9 @@ export class VoiceEventHandler {
         case 'nothingHeard':
           this.logger.debug('Nothing heard in the utterance', ids);
           return;
+        case 'notTranslated':
+          this.logger.info('Utterance not translated; nothing posted', ids);
+          return;
         case 'notRunning':
           this.logger.warn('Received audio stream for non-existent session', ids);
           return;

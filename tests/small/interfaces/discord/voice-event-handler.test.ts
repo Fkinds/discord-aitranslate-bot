@@ -72,6 +72,16 @@ describe('VoiceEventHandler', () => {
     expect(logger.messages('debug')).toEqual(['Nothing heard in the utterance']);
   });
 
+  it('logs an utterance that was not translated, and posts nothing', async () => {
+    sessions.save(aSession());
+    translator.translatesNothing();
+
+    await handler.utteranceStarted(GUILD, ALICE, speech());
+
+    expect(publisher.posts).toEqual([]);
+    expect(logger.messages('info')).toEqual(['Utterance not translated; nothing posted']);
+  });
+
   it('logs an utterance in a server with no session', async () => {
     await handler.utteranceStarted(GUILD, ALICE, speech());
 
