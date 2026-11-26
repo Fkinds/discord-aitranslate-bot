@@ -36,6 +36,13 @@ const failure = (status: number, type: string): StubResponse => ({
   status,
   body: { type: 'error', error: { type, message: type } },
 });
+/**
+ * How long a request may take: long enough for the Anthropic SDK's first
+ * request on a busy CI runner, which took over 200 ms. The tests of a
+ * timeout make a translator of their own, with 200 ms.
+ */
+const TIMEOUT_MS = 2_000;
+const QUICK_TIMEOUT_MS = 200;
 const REPLY = answer('{"ko": "우리는 이와타 씨의 차를 타고 갔습니다.", "en": "We went in Mr. Iwata\'s car."}');
 
 // The Anthropic SDK and the translator against a stand-in for the Messages API on localhost.
@@ -47,7 +54,7 @@ describe('ClaudeTextTranslator over HTTP', () => {
   beforeEach(async () => {
     api = await HttpStub.start();
     logger = new FakeLogger();
-    translator = new ClaudeTextTranslator('test-key', { timeoutMs: 200, maxRetries: 2, baseUrl: api.url }, logger);
+    translator = new ClaudeTextTranslator('test-key', { timeoutMs: TIMEOUT_MS, maxRetries: 2, baseUrl: api.url }, logger);
   });
 
   afterEach(async () => {
@@ -89,8 +96,9 @@ describe('ClaudeTextTranslator over HTTP', () => {
 
   it('abandons a request that takes too long, and tries again', async () => {
     api.respond({ ...REPLY, delayMs: 1_000 }, REPLY);
+    const quick = new ClaudeTextTranslator('test-key', { timeoutMs: QUICK_TIMEOUT_MS, maxRetries: 2, baseUrl: api.url }, logger);
 
-    await expect(translator.translate(TEXT, JA, [KO, EN])).resolves.toHaveLength(2);
+    await expect(quick.translate(TEXT, JA, [KO, EN])).resolves.toHaveLength(2);
     expect(api.requests).toHaveLength(2);
   });
 
@@ -127,7 +135,7 @@ describe('ClaudeTextTranslator.checkAccess over HTTP', () => {
 
   beforeEach(async () => {
     api = await HttpStub.start();
-    translator = new ClaudeTextTranslator('test-key', { timeoutMs: 200, maxRetries: 2, baseUrl: api.url }, new FakeLogger());
+    translator = new ClaudeTextTranslator('test-key', { timeoutMs: TIMEOUT_MS, maxRetries: 2, baseUrl: api.url }, new FakeLogger());
   });
 
   afterEach(async () => {
@@ -163,8 +171,13 @@ describe('ClaudeTextTranslator.checkAccess over HTTP', () => {
 
   it('finds Claude unreachable when the answer takes too long, without asking again', async () => {
     api.respond({ ...REPLY, delayMs: 1_000 }, REPLY);
+    const quick = new ClaudeTextTranslator(
+      'test-key',
+      { timeoutMs: QUICK_TIMEOUT_MS, maxRetries: 2, baseUrl: api.url },
+      new FakeLogger()
+    );
 
-    expect(await translator.checkAccess()).toEqual({ kind: 'unreachable', reason: 'the request timed out' });
+    expect(await quick.checkAccess()).toEqual({ kind: 'unreachable', reason: 'the request timed out' });
     expect(api.requests).toHaveLength(1);
   });
 });
@@ -193,7 +206,7 @@ describe('ClaudeTextTranslator without an API key', () => {
 
   /** The translator, made after the test has set up the credentials: the SDK looks for them once, as it is made. */
   const aTranslator = () =>
-    new ClaudeTextTranslator(undefined, { timeoutMs: 200, maxRetries: 2, baseUrl: api.url }, new FakeLogger());
+    new ClaudeTextTranslator(undefined, { timeoutMs: TIMEOUT_MS, maxRetries: 2, baseUrl: api.url }, new FakeLogger());
 
   /** What `ant auth login` leaves: a profile, and its token in a file only its owner may read. */
   async function signIn(token: string, workspaceId: string): Promise<void> {

@@ -22,7 +22,7 @@ describe('requireClaude', () => {
   let api: HttpStub;
   let logger: FakeLogger;
   const claude = (apiKey: string | undefined) =>
-    new ClaudeTextTranslator(apiKey, { timeoutMs: 200, maxRetries: 2, baseUrl: api.url }, logger);
+    new ClaudeTextTranslator(apiKey, { timeoutMs: 2_000, maxRetries: 2, baseUrl: api.url }, logger);
 
   beforeEach(async () => {
     api = await HttpStub.start();
