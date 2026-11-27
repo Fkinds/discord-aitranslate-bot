@@ -13,8 +13,18 @@ export type TranslatorConfig =
   /** Without an API key, the SDK finds the credentials: a sign-in with `ant auth login`, or Workload Identity Federation. */
   | { readonly kind: 'claude'; readonly apiKey: string | undefined; readonly modelsDir: string }
   | { readonly kind: 'gemini'; readonly apiKey: string; readonly model: string }
-  /** `ollamaUrl` is where Ollama is, read from OLLAMA_HOST as Ollama reads it. */
-  | { readonly kind: 'translategemma'; readonly ollamaUrl: string; readonly model: string; readonly modelsDir: string }
+  /**
+   * `ollamaUrl` is where Ollama is, read from OLLAMA_HOST as Ollama reads it.
+   * `glossaryFile`, from GLOSSARY_FILE, is the glossary TranslateGemma
+   * translates the terms of as it says, an absolute path; none when unset.
+   */
+  | {
+      readonly kind: 'translategemma';
+      readonly ollamaUrl: string;
+      readonly model: string;
+      readonly modelsDir: string;
+      readonly glossaryFile?: string;
+    }
   | { readonly kind: 'fake' };
 
 export interface Config {
@@ -94,6 +104,10 @@ export function readConfig(env: Env, workingDir: string): Config {
     throw new ConfigError(`TRANSLATOR must be one of ${TRANSLATORS.join(', ')}, got ${JSON.stringify(kind)}`);
   }
 
+  if (value('GLOSSARY_FILE') !== undefined && kind !== 'translategemma') {
+    throw new ConfigError(`GLOSSARY_FILE works only with TRANSLATOR=translategemma, got TRANSLATOR=${kind}`);
+  }
+
   const apiKey = API_KEYS[kind];
   const required = ['DISCORD_BOT_TOKEN', 'DISCORD_CLIENT_ID', ...(apiKey === undefined ? [] : [apiKey])];
   const missing = required.filter((name) => value(name) === undefined);
@@ -148,8 +162,15 @@ function translatorFrom(
       return { kind, apiKey: value('ANTHROPIC_API_KEY'), modelsDir: modelsDirFrom(value, workingDir) };
     case 'gemini':
       return { kind, apiKey: value('GOOGLE_GEMINI_API_KEY')!, model: value('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL };
-    case 'translategemma':
-      return { kind, ...translateGemmaFrom(value), modelsDir: modelsDirFrom(value, workingDir) };
+    case 'translategemma': {
+      const glossaryFile = value('GLOSSARY_FILE');
+      return {
+        kind,
+        ...translateGemmaFrom(value),
+        modelsDir: modelsDirFrom(value, workingDir),
+        ...(glossaryFile === undefined ? {} : { glossaryFile: path.resolve(workingDir, glossaryFile) }),
+      };
+    }
     case 'fake':
       return { kind };
   }

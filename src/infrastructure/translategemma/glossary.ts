@@ -1,4 +1,5 @@
-import type { LanguageCode } from '../../domain/language-code';
+import { LanguageCode } from '../../domain/language-code';
+import { DomainError } from '../../domain/shared/domain-error';
 
 /** A term of the glossary found in what was said, and what to translate it into. */
 export interface GlossaryMatch {
@@ -8,7 +9,7 @@ export interface GlossaryMatch {
   readonly translation: string;
 }
 
-/** A line of a glossary that is not two columns of terms. */
+/** A glossary that cannot be read: its first line does not name two languages, a line is not two columns of terms, or a term is written the same on two lines. */
 export class GlossaryMalformed extends Error {
   constructor(message: string) {
     super(message);
@@ -23,26 +24,41 @@ type Term = ReadonlyMap<string, readonly string[]>;
  * Terms of a domain, such as a game's, and how each is said in two languages,
  * for a translator to translate them as the people who say them do.
  *
- * A glossary is written one term a line, the two languages in two columns
- * separated by a tab. Each column may write the term several ways separated
- * by "|", the first being the one to translate into. A line that starts with
- * "#" is a note, and an empty line is skipped:
+ * A glossary is tab-separated values (IANA text/tab-separated-values): its
+ * first line names the two languages of its columns by their language tags,
+ * and each line after it is one term, written in those two languages. Each
+ * column may write the term several ways separated by "|", the first being
+ * the one to translate into. Unlike that format, a line that starts with "#"
+ * is a note, and an empty line is skipped:
  *
  *     # heroes
+ *     ja	ko
  *     マーシー	메르시|메르
  *     ウルト|ult	궁|궁극기
+ *
+ * A way of writing a term is on one line only, in each language, so that
+ * what is said is always found as one term.
  */
 export class Glossary {
-  private constructor(private readonly terms: readonly Term[]) {}
+  private constructor(
+    /** The languages of the two columns, in order. */
+    readonly languages: readonly [LanguageCode, LanguageCode],
+    private readonly terms: readonly Term[]
+  ) {}
 
-  /**
-   * @param languages the languages of the two columns, in order.
-   * @throws GlossaryMalformed for a line that is not two columns of terms, naming it by its number.
-   */
-  static parse(text: string, languages: readonly [LanguageCode, LanguageCode]): Glossary {
+  /** @throws GlossaryMalformed when it cannot be read, naming the line. */
+  static parse(text: string): Glossary {
+    let languages: [LanguageCode, LanguageCode] | undefined;
     const terms: Term[] = [];
+    /** The line each way of writing a term is on, by language and in the form terms are compared in. */
+    const lineOf = new Map<string, number>();
     for (const [i, line] of text.split(/\r?\n/).entries()) {
       if (line.trim() === '' || line.startsWith('#')) continue;
+      const number = i + 1;
+      if (languages === undefined) {
+        languages = languagesIn(line, number);
+        continue;
+      }
       const columns = line.split('\t').map((column) =>
         column
           .split('|')
@@ -50,11 +66,24 @@ export class Glossary {
           .filter((form) => form !== '')
       );
       if (columns.length !== 2 || columns.some((forms) => forms.length === 0)) {
-        throw new GlossaryMalformed(`Line ${i + 1} of the glossary is not two columns of terms separated by a tab`);
+        throw new GlossaryMalformed(`Line ${number} of the glossary is not two columns of terms separated by a tab`);
       }
-      terms.push(new Map(languages.map((language, column) => [language.tag, columns[column]!])));
+      for (const [column, forms] of columns.entries()) {
+        for (const form of forms) {
+          const key = `${languages[column]!.tag}\t${comparable(form)}`;
+          const first = lineOf.get(key);
+          if (first === number) throw new GlossaryMalformed(`Line ${number} of the glossary writes "${form}" twice`);
+          if (first !== undefined) {
+            throw new GlossaryMalformed(`Line ${number} of the glossary writes "${form}" as line ${first} does: write it on one line only`);
+          }
+          lineOf.set(key, number);
+        }
+      }
+      const named = languages;
+      terms.push(new Map(named.map((language, column) => [language.tag, columns[column]!])));
     }
-    return new Glossary(terms);
+    if (languages === undefined) throw new GlossaryMalformed('The glossary is empty: its first line must name its two languages');
+    return new Glossary(languages, terms);
   }
 
   /** How many terms it has. */
@@ -101,6 +130,22 @@ export class Glossary {
       matches.push(match);
     }
     return matches;
+  }
+}
+
+/** The two languages the first line names, such as "ja" and "ko", separated by a tab. */
+function languagesIn(line: string, number: number): [LanguageCode, LanguageCode] {
+  const tags = line.split('\t').map((tag) => tag.trim());
+  const malformed = (why: string) =>
+    new GlossaryMalformed(`Line ${number} of the glossary, its first, must name its two languages by their tags, such as "ja" and "ko": ${why}`);
+  if (tags.length !== 2) throw malformed(`it has ${tags.length} columns`);
+  try {
+    const [first, second] = tags.map((tag) => LanguageCode.of(tag)) as [LanguageCode, LanguageCode];
+    if (first.equals(second)) throw malformed(`it names ${first.tag} twice`);
+    return [first, second];
+  } catch (error) {
+    if (!(error instanceof DomainError)) throw error;
+    throw malformed(error.message);
   }
 }
 
