@@ -25,7 +25,9 @@ import { GetTranslationStatus } from './usecases/get-translation-status';
 import type { Clock } from './usecases/ports/clock';
 import type { Logger } from './usecases/ports/logger';
 import type { Translator } from './usecases/ports/translator';
+import { RecordChannelMove } from './usecases/record-channel-move';
 import { RecordSpeakingStarted, RecordSpeakingStopped } from './usecases/record-speaking';
+import { ReportConnectionBack, ReportConnectionLost } from './usecases/report-connection';
 import { SessionStore } from './usecases/session-store';
 import { StartTranslation } from './usecases/start-translation';
 import { StopTranslation } from './usecases/stop-translation';
@@ -208,6 +210,9 @@ export function compose(
       recordSpeakingStarted: new RecordSpeakingStarted(sessions),
       recordSpeakingStopped: new RecordSpeakingStopped(sessions),
       translateUtterance: new TranslateUtterance(sessions, translator, publisher),
+      recordChannelMove: new RecordChannelMove(sessions),
+      reportConnectionLost: new ReportConnectionLost(sessions, publisher),
+      reportConnectionBack: new ReportConnectionBack(sessions, publisher),
       endDisconnectedSession: new EndDisconnectedSession(sessions, publisher),
     },
     logger

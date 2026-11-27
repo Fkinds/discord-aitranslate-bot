@@ -1,10 +1,12 @@
-import type { GuildId, UserId } from '../../domain/discord-ids';
+import type { ChannelId, GuildId, UserId } from '../../domain/discord-ids';
 import type { EndDisconnectedSession } from '../../usecases/end-disconnected-session';
 import type { Logger } from '../../usecases/ports/logger';
 import type { SpeechAudio } from '../../usecases/ports/speech-audio';
 import { PublishFailed } from '../../usecases/ports/translation-publisher';
 import { TranslationFailed } from '../../usecases/ports/translator';
+import type { RecordChannelMove } from '../../usecases/record-channel-move';
 import type { RecordSpeakingStarted, RecordSpeakingStopped } from '../../usecases/record-speaking';
+import type { ReportConnectionBack, ReportConnectionLost } from '../../usecases/report-connection';
 import type { TranslateUtterance } from '../../usecases/translate-utterance';
 import { unreachable } from '../unreachable';
 
@@ -12,6 +14,9 @@ export interface VoiceEventUseCases {
   readonly recordSpeakingStarted: RecordSpeakingStarted;
   readonly recordSpeakingStopped: RecordSpeakingStopped;
   readonly translateUtterance: TranslateUtterance;
+  readonly recordChannelMove: RecordChannelMove;
+  readonly reportConnectionLost: ReportConnectionLost;
+  readonly reportConnectionBack: ReportConnectionBack;
   readonly endDisconnectedSession: EndDisconnectedSession;
 }
 
@@ -77,6 +82,35 @@ export class VoiceEventHandler {
             ? 'Failed to post a translation'
             : 'Failed to process audio stream';
       this.logger.error(message, { ...ids, error });
+    }
+  }
+
+  moved(guildId: GuildId, voiceChannelId: ChannelId): void {
+    this.safely('moved', guildId, () => {
+      const result = this.useCases.recordChannelMove.execute({ guildId, voiceChannelId });
+      if (result.kind === 'moved') {
+        this.logger.info('Moved to another voice channel', { guildId: guildId.value, channelId: voiceChannelId.value });
+      }
+    });
+  }
+
+  /** Resolves once it has been said, or failed to be; never rejects. */
+  async connectionLost(guildId: GuildId): Promise<void> {
+    try {
+      const result = await this.useCases.reportConnectionLost.execute({ guildId });
+      if (result.kind === 'reported') this.logger.warn('Voice connection lost for a while; said so', { guildId: guildId.value });
+    } catch (error) {
+      this.logger.error('Failed to post that the voice connection was lost', { guildId: guildId.value, error });
+    }
+  }
+
+  /** Resolves once it has been said, or failed to be; never rejects. */
+  async connectionBack(guildId: GuildId): Promise<void> {
+    try {
+      const result = await this.useCases.reportConnectionBack.execute({ guildId });
+      if (result.kind === 'reported') this.logger.info('Voice connection back; said so', { guildId: guildId.value });
+    } catch (error) {
+      this.logger.error('Failed to post that the voice connection was back', { guildId: guildId.value, error });
     }
   }
 

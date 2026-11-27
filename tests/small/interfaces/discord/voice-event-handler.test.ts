@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { GuildId, UserId } from '../../../../src/domain/discord-ids';
+import { ChannelId, GuildId, UserId } from '../../../../src/domain/discord-ids';
 import { VoiceEventHandler } from '../../../../src/interfaces/discord/voice-event-handler';
 import { EndDisconnectedSession } from '../../../../src/usecases/end-disconnected-session';
 import { SpeechAudio } from '../../../../src/usecases/ports/speech-audio';
 import { PublishFailed } from '../../../../src/usecases/ports/translation-publisher';
 import { TranslationAbandoned, TranslationFailed } from '../../../../src/usecases/ports/translator';
+import { RecordChannelMove } from '../../../../src/usecases/record-channel-move';
 import { RecordSpeakingStarted, RecordSpeakingStopped } from '../../../../src/usecases/record-speaking';
+import { ReportConnectionBack, ReportConnectionLost } from '../../../../src/usecases/report-connection';
 import { SessionStore } from '../../../../src/usecases/session-store';
 import { TranslateUtterance } from '../../../../src/usecases/translate-utterance';
 import { aSession } from '../../../support/builders';
@@ -34,6 +36,9 @@ describe('VoiceEventHandler', () => {
         recordSpeakingStarted: new RecordSpeakingStarted(sessions),
         recordSpeakingStopped: new RecordSpeakingStopped(sessions),
         translateUtterance: new TranslateUtterance(sessions, translator, publisher),
+        recordChannelMove: new RecordChannelMove(sessions),
+        reportConnectionLost: new ReportConnectionLost(sessions, publisher),
+        reportConnectionBack: new ReportConnectionBack(sessions, publisher),
         endDisconnectedSession: new EndDisconnectedSession(sessions, publisher),
       },
       logger
@@ -119,6 +124,47 @@ describe('VoiceEventHandler', () => {
 
     await expect(handler.utteranceStarted(GUILD, ALICE, Promise.reject(new Error('stream destroyed')))).resolves.toBeUndefined();
     expect(logger.messages('error')).toEqual(['Failed to process audio stream']);
+  });
+
+  it('moves the session to the voice channel a member moved the bot to, and logs it', () => {
+    sessions.save(aSession({ voice: '10' }));
+
+    handler.moved(GUILD, ChannelId.of('11'));
+
+    expect(sessions.find(GUILD)?.voiceChannelId.value).toBe('11');
+    expect(logger.messages('info')).toEqual(['Moved to another voice channel']);
+  });
+
+  it('says that the connection is lost, and that it is back, and logs it', async () => {
+    sessions.save(aSession());
+
+    await handler.connectionLost(GUILD);
+    await handler.connectionBack(GUILD);
+
+    expect(publisher.notices.map((notice) => notice.kind)).toEqual(['connectionLost', 'connectionBack']);
+    expect(logger.messages('warn')).toEqual(['Voice connection lost for a while; said so']);
+    expect(logger.messages('info')).toEqual(['Voice connection back; said so']);
+    expect(sessions.find(GUILD)).toBeDefined();
+  });
+
+  it.each([
+    ['connectionLost', 'Failed to post that the voice connection was lost'],
+    ['connectionBack', 'Failed to post that the voice connection was back'],
+  ] as const)('logs a failure to say %s, and does not reject', async (event, message) => {
+    sessions.save(aSession());
+    publisher.failNext(new PublishFailed('Missing Access'));
+
+    await expect(handler[event](GUILD)).resolves.toBeUndefined();
+    expect(logger.messages('error')).toEqual([message]);
+  });
+
+  it('says and logs nothing about the connection with no session', async () => {
+    handler.moved(GUILD, ChannelId.of('11'));
+    await handler.connectionLost(GUILD);
+    await handler.connectionBack(GUILD);
+
+    expect(publisher.notices).toEqual([]);
+    expect(logger.entries).toEqual([]);
   });
 
   it('ends the session when the connection is lost for good, says so, and logs it', async () => {

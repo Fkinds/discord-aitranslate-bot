@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { GuildId, UserId } from '../../domain/discord-ids';
+import type { ChannelId, GuildId, UserId } from '../../domain/discord-ids';
 import type { Clock } from '../../usecases/ports/clock';
 import type { Logger } from '../../usecases/ports/logger';
 import type { SpeechAudio } from '../../usecases/ports/speech-audio';
@@ -56,6 +56,18 @@ export class RecordingVoiceListener implements VoiceListener {
   utteranceStarted(guildId: GuildId, userId: UserId, speech: Promise<SpeechAudio>): void {
     if (userId.equals(this.member)) void this.record(this.clock(), speech);
     this.listener.utteranceStarted(guildId, userId, speech);
+  }
+
+  moved(guildId: GuildId, voiceChannelId: ChannelId): void {
+    this.listener.moved(guildId, voiceChannelId);
+  }
+
+  connectionLost(guildId: GuildId): void {
+    this.listener.connectionLost(guildId);
+  }
+
+  connectionBack(guildId: GuildId): void {
+    this.listener.connectionBack(guildId);
   }
 
   disconnected(guildId: GuildId): void {

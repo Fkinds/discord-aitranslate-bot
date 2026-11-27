@@ -324,6 +324,8 @@ Whisper hears one utterance at a time, on the CPU, and the translator translates
 
 The bot keeps its voice connection until `/translate-leave`. Discord closes it now and then, and the bot usually gets it back by itself within seconds. When it has been away for 15 seconds, however it dropped, the bot gives it up and joins the voice channel again on a new connection, in the channel it was last in. Each new connection has twice as long as the one before to be ready, from 5 seconds up to 60 seconds, and the bot goes on until one is. It joins again even when a moderator disconnected it; to make it stop, run `/translate-leave`. When the voice channel is gone, translation ends, and the bot says so in the text channel.
 
+When the connection has been away for 30 seconds, however often the bot joined again meanwhile, the bot says in the text channel that it lost the connection and is joining again, and once it is back, it says that too. Nothing is said when it is back sooner. When a member moves the bot to another voice channel, it translates there, and `/translate-status` names that channel.
+
 ### The Speech Models
 
 `pnpm models:download` downloads them, at the versions listed in `src/infrastructure/local/model-files.ts`:
