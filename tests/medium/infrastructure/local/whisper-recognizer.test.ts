@@ -46,10 +46,15 @@ describe('WhisperRecognizer, with the local models', () => {
   it(
     'hears what was said in Japanese, and that it was Japanese',
     async () => {
-      const heard = await recognizer.recognize(recordedSpeech());
+      const audio = recordedSpeech();
+      const heard = await recognizer.recognize(audio);
 
       expect(heard.language).toBe('ja');
       expect(heard.text).toMatch(/岩田さんの車/);
+      // The speech found is the recording, but for the silence around it.
+      expect(heard.stretches).toBeGreaterThan(0);
+      expect(heard.speechMs).toBeGreaterThan(0);
+      expect(heard.speechMs).toBeLessThanOrEqual(audio.durationMs);
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
@@ -96,7 +101,7 @@ describe('WhisperRecognizer, with the local models', () => {
   ])(
     'hears nothing in %s',
     async (_case, audio) => {
-      expect(await recognizer.recognize(audio)).toEqual({ text: '', language: null });
+      expect(await recognizer.recognize(audio)).toEqual({ text: '', language: null, speechMs: 0, stretches: 0 });
     },
     LOCAL_MODEL_TIMEOUT_MS
   );
