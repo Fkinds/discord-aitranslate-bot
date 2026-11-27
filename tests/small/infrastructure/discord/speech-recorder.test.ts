@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { GuildId, UserId } from '../../../../src/domain/discord-ids';
+import { ChannelId, GuildId, UserId } from '../../../../src/domain/discord-ids';
 import { toWav } from '../../../../src/infrastructure/audio/wav';
 import type { VoiceListener } from '../../../../src/infrastructure/discord/discord-voice';
 import { RecordingVoiceListener, recordingNameFor } from '../../../../src/infrastructure/discord/speech-recorder';
@@ -18,6 +18,9 @@ class EventLog implements VoiceListener {
   speakingStarted = (guildId: GuildId, userId: UserId) => this.events.push(`started ${guildId.value} ${userId.value}`);
   speakingStopped = (guildId: GuildId, userId: UserId) => this.events.push(`stopped ${guildId.value} ${userId.value}`);
   utteranceStarted = (guildId: GuildId, userId: UserId) => this.events.push(`utterance ${guildId.value} ${userId.value}`);
+  moved = (guildId: GuildId, voiceChannelId: ChannelId) => this.events.push(`moved ${guildId.value} ${voiceChannelId.value}`);
+  connectionLost = (guildId: GuildId) => this.events.push(`lost ${guildId.value}`);
+  connectionBack = (guildId: GuildId) => this.events.push(`back ${guildId.value}`);
   disconnected = (guildId: GuildId) => this.events.push(`disconnected ${guildId.value}`);
 }
 
@@ -53,9 +56,20 @@ describe('RecordingVoiceListener', () => {
     listener.speakingStarted(GUILD, MEMBER);
     listener.utteranceStarted(GUILD, OTHER, Promise.resolve(SPEECH));
     listener.speakingStopped(GUILD, MEMBER);
+    listener.moved(GUILD, ChannelId.of('11'));
+    listener.connectionLost(GUILD);
+    listener.connectionBack(GUILD);
     listener.disconnected(GUILD);
 
-    expect(inner.events).toEqual(['started 1 30', 'utterance 1 31', 'stopped 1 30', 'disconnected 1']);
+    expect(inner.events).toEqual([
+      'started 1 30',
+      'utterance 1 31',
+      'stopped 1 30',
+      'moved 1 11',
+      'lost 1',
+      'back 1',
+      'disconnected 1',
+    ]);
   });
 
   it("records the member's utterance as a WAVE file named by when it started and ended", async () => {

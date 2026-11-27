@@ -9,7 +9,7 @@ import {
   VoiceConnectionStatus,
 } from '@discordjs/voice';
 import type { Client } from 'discord.js';
-import { type ChannelId, type GuildId, UserId } from '../../domain/discord-ids';
+import { ChannelId, type GuildId, UserId } from '../../domain/discord-ids';
 import type { Logger } from '../../usecases/ports/logger';
 import type { SpeechAudio } from '../../usecases/ports/speech-audio';
 import { VoiceConnectionFailed, type VoiceConnector } from '../../usecases/ports/voice-connector';
@@ -22,6 +22,12 @@ export interface VoiceListener {
   speakingStopped(guildId: GuildId, userId: UserId): void;
   /** A member started an utterance; `speech` resolves once they have been silent for a while. */
   utteranceStarted(guildId: GuildId, userId: UserId, speech: Promise<SpeechAudio>): void;
+  /** A member moved the bot to another voice channel of the server. */
+  moved(guildId: GuildId, voiceChannelId: ChannelId): void;
+  /** The bot's voice connection has been away for a while; it is joining again. */
+  connectionLost(guildId: GuildId): void;
+  /** The bot's voice connection is back, after the listener was told it was lost. */
+  connectionBack(guildId: GuildId): void;
   /** The bot lost its voice connection in the server for good. */
   disconnected(guildId: GuildId): void;
 }
@@ -43,6 +49,8 @@ export interface DiscordVoiceOptions {
    */
   readonly retryDelayMs: number;
   readonly maxRetryDelayMs: number;
+  /** How long the connection may be away from ready, however often the bot joins again, before the listener is told it is lost. */
+  readonly lostAfterMs: number;
   /**
    * How long a member must be silent for their utterance to end. The pauses
    * people take within a sentence are longer than 300 ms, which cut sentences
@@ -60,6 +68,7 @@ export const DEFAULT_VOICE_OPTIONS: DiscordVoiceOptions = {
   stuckAfterMs: 15_000,
   retryDelayMs: 5_000,
   maxRetryDelayMs: 60_000,
+  lostAfterMs: 30_000,
   silenceMs: 800,
 };
 
@@ -74,6 +83,14 @@ interface Kept {
   timer: ReturnType<typeof setTimeout> | undefined;
 }
 
+/** A time when the server's voice connection is away from ready, from the connection it dropped on until one is ready. */
+interface Outage {
+  /** When to tell the listener that the connection is lost, unless it is back by then. */
+  readonly timer: ReturnType<typeof setTimeout>;
+  /** Whether the listener was told. */
+  told: boolean;
+}
+
 /**
  * Joins and leaves Discord voice channels, and tells the listener what it
  * hears there.
@@ -85,9 +102,14 @@ interface Kept {
  * ready, waiting twice as long each time, from `retryDelayMs` up to
  * `maxRetryDelayMs`. When that channel is gone, or the bot is no longer in
  * the server, it stops, and tells the listener.
+ *
+ * When the connection has been away from ready for `lostAfterMs`, it tells
+ * the listener that the connection is lost, and once one is ready, that it is
+ * back. It also tells the listener when a member moves the bot.
  */
 export class DiscordVoice implements VoiceConnector {
   private readonly kept = new Map<string, Kept>();
+  private readonly outages = new Map<string, Outage>();
 
   constructor(
     private readonly client: Pick<Client, 'guilds'>,
@@ -100,12 +122,13 @@ export class DiscordVoice implements VoiceConnector {
     const guild = this.client.guilds.cache.get(guildId.value);
     if (!guild) throw new VoiceConnectionFailed(`The bot is not in server ${guildId.value}`);
 
-    this.stopKeeping(guildId)?.destroy();
+    this.forget(guildId)?.destroy();
     const connection = this.connect(guildId, guild.voiceAdapterCreator as DiscordGatewayAdapterCreator, {
       channelId: voiceChannelId.value,
       attempts: 0,
       readyWithinMs: this.options.stuckAfterMs,
     });
+    this.beginOutage(guildId);
 
     try {
       await entersState(connection, VoiceConnectionStatus.Ready, this.options.readyTimeoutMs);
@@ -116,14 +139,14 @@ export class DiscordVoice implements VoiceConnector {
         this.logger.info('Connection still establishing, continuing anyway', { guildId: guildId.value, status });
         return;
       }
-      this.stopKeeping(guildId);
+      this.forget(guildId);
       if (status !== VoiceConnectionStatus.Destroyed) connection.destroy();
       throw new VoiceConnectionFailed(`Failed to join voice channel ${voiceChannelId.value}`, { cause: error });
     }
   }
 
   async leave(guildId: GuildId): Promise<void> {
-    this.stopKeeping(guildId)?.destroy();
+    this.forget(guildId)?.destroy();
     getVoiceConnection(guildId.value)?.destroy();
   }
 
@@ -148,6 +171,35 @@ export class DiscordVoice implements VoiceConnector {
     return connection;
   }
 
+  /** Stop keeping the server's connection, and telling of it, and return it, if it was kept. */
+  private forget(guildId: GuildId): VoiceConnection | undefined {
+    clearTimeout(this.outages.get(guildId.value)?.timer);
+    this.outages.delete(guildId.value);
+    return this.stopKeeping(guildId);
+  }
+
+  /** Start counting the time the server's connection is away from ready, unless it is counted already. */
+  private beginOutage(guildId: GuildId): void {
+    if (this.outages.has(guildId.value)) return;
+    const outage: Outage = {
+      timer: setTimeout(() => {
+        outage.told = true;
+        this.listener.connectionLost(guildId);
+      }, this.options.lostAfterMs),
+      told: false,
+    };
+    this.outages.set(guildId.value, outage);
+  }
+
+  /** The server's connection is ready: tell the listener it is back, if it was told it was lost. */
+  private endOutage(guildId: GuildId): void {
+    const outage = this.outages.get(guildId.value);
+    if (!outage) return;
+    clearTimeout(outage.timer);
+    this.outages.delete(guildId.value);
+    if (outage.told) this.listener.connectionBack(guildId);
+  }
+
   /** Stop keeping the server's connection, and return it, if it was kept. */
   private stopKeeping(guildId: GuildId): VoiceConnection | undefined {
     const kept = this.kept.get(guildId.value);
@@ -170,7 +222,7 @@ export class DiscordVoice implements VoiceConnector {
     const guild = this.client.guilds.cache.get(guildId.value);
     if (!guild?.channels.cache.has(kept.channelId)) {
       this.logger.warn('The voice channel is gone; no longer joining it again', ids);
-      this.stopKeeping(guildId)?.destroy();
+      this.forget(guildId)?.destroy();
       this.listener.disconnected(guildId);
       return;
     }
@@ -195,20 +247,26 @@ export class DiscordVoice implements VoiceConnector {
       if (kept?.connection !== connection) return;
 
       // A member moved the bot, and the connection follows it there.
-      kept.channelId = connection.joinConfig.channelId ?? kept.channelId;
+      const { channelId } = connection.joinConfig;
+      if (channelId && channelId !== kept.channelId) {
+        kept.channelId = channelId;
+        this.listener.moved(guildId, ChannelId.of(channelId));
+      }
       switch (to.status) {
         case VoiceConnectionStatus.Ready:
           clearTimeout(kept.timer);
           kept.timer = undefined;
           if (kept.attempts > 0) this.logger.info('Voice connection is back', { guildId: guildId.value, attempts: kept.attempts });
           kept.attempts = 0;
+          this.endOutage(guildId);
           return;
         case VoiceConnectionStatus.Destroyed:
           // Destroyed by someone else, as at shutdown.
-          this.stopKeeping(guildId);
+          this.forget(guildId);
           return;
         default:
           if (kept.timer === undefined) this.giveUpAfter(kept, guildId, this.options.stuckAfterMs);
+          this.beginOutage(guildId);
       }
     });
     connection.on('error', (error) => {

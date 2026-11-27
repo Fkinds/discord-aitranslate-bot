@@ -60,6 +60,9 @@ class RecordingListener implements VoiceListener {
     this.events.push(`utterance ${guildId.value} ${userId.value}`);
     this.speeches.push(speech);
   };
+  moved = (guildId: GuildId, voiceChannelId: ChannelId) => this.events.push(`moved ${guildId.value} ${voiceChannelId.value}`);
+  connectionLost = (guildId: GuildId) => this.events.push(`lost ${guildId.value}`);
+  connectionBack = (guildId: GuildId) => this.events.push(`back ${guildId.value}`);
   disconnected = (guildId: GuildId) => this.events.push(`disconnected ${guildId.value}`);
 }
 
@@ -319,6 +322,61 @@ describe('DiscordVoice', () => {
 
       expect(connections).toHaveLength(1);
       expect(first().destroy).toHaveBeenCalled();
+      expect(listener.events).toEqual([]);
+    });
+
+    it('tells the listener that the connection is lost once it has been away for 30 s, and back once one is ready', () => {
+      drop();
+
+      jest.advanceTimersByTime(29_999);
+      expect(listener.events).toEqual([]);
+      jest.advanceTimersByTime(1);
+      expect(listener.events).toEqual(['lost 1']);
+      // Joined again at 15, 20 and 30 s, and told once.
+      expect(connections).toHaveLength(4);
+
+      last().becomes(VoiceConnectionStatus.Ready);
+      expect(listener.events).toEqual(['lost 1', 'back 1']);
+    });
+
+    it('tells the listener nothing when the connection is back within 30 s', () => {
+      drop();
+      jest.advanceTimersByTime(20_000);
+      last().becomes(VoiceConnectionStatus.Ready);
+
+      jest.advanceTimersByTime(60_000);
+
+      expect(listener.events).toEqual([]);
+    });
+
+    it('tells the listener that a connection that never got ready after joining is lost', async () => {
+      connectionEntersState.mockImplementation(async (connection) => {
+        (connection as unknown as FakeConnection).state = { status: VoiceConnectionStatus.Signalling };
+        throw new Error('The operation was aborted');
+      });
+      await voice.join(GUILD, VOICE);
+
+      jest.advanceTimersByTime(30_000);
+
+      expect(listener.events).toEqual(['lost 1']);
+    });
+
+    it('tells the listener, once, when a member moves the bot', () => {
+      first().joinConfig.channelId = '11';
+
+      first().becomes(VoiceConnectionStatus.Connecting);
+      first().becomes(VoiceConnectionStatus.Ready);
+
+      expect(listener.events).toEqual(['moved 1 11']);
+    });
+
+    it('tells the listener nothing more once the bot leaves', async () => {
+      drop();
+      jest.mocked(getVoiceConnection).mockReturnValue(undefined);
+
+      await voice.leave(GUILD);
+      jest.advanceTimersByTime(60_000);
+
       expect(listener.events).toEqual([]);
     });
 

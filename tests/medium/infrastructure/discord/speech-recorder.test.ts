@@ -12,6 +12,9 @@ const ignore: VoiceListener = {
   speakingStarted: () => {},
   speakingStopped: () => {},
   utteranceStarted: () => {},
+  moved: () => {},
+  connectionLost: () => {},
+  connectionBack: () => {},
   disconnected: () => {},
 };
 
