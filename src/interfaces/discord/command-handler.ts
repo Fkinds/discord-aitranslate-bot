@@ -101,6 +101,15 @@ export class CommandHandler {
         await answer(interaction, `✅ Now translating in ${channel} ${intoLanguages(session.languages)}`);
         return this.announceStart(interaction, session.voiceChannelId, session.languages);
       }
+      case 'rejoined': {
+        const { session } = result;
+        this.logger.info('Joined the voice channel again, as asked', {
+          guildId: guildId.value,
+          channelId: session.voiceChannelId.value,
+        });
+        const channel = voiceChannel ? `**${voiceChannel.name}**` : `<#${session.voiceChannelId.value}>`;
+        return answer(interaction, `🔄 Joined ${channel} again; translating ${intoLanguages(session.languages)}`);
+      }
       case 'sameLanguageTwice':
         return answer(interaction, SAME_LANGUAGE_TWICE);
       case 'requesterNotInVoiceChannel':
