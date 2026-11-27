@@ -242,7 +242,7 @@ Examples:
 ```
 
 #### `/translate-leave`
-Leave the voice channel and stop translating.
+Leave the voice channel and stop translating. Until then, the bot joins the voice channel again whenever its connection drops (see [When the Voice Connection Drops](#when-the-voice-connection-drops)).
 
 #### `/translate-language <language> [second-language]`
 Change the languages: one language, or a pair, as for `/translate-join`. One language chosen twice is refused.
@@ -319,6 +319,10 @@ graph LR
 7. 💬 **Post**: The bot posts what was said and its translations.
 
 Whisper hears one utterance at a time, on the CPU, and the translator translates one at a time, so that the next utterance is heard while one is translated; both keep the order the utterances came in, and so do the posts. One that waited for others logs how long it waited. An utterance still waiting 10 seconds after it ended is dropped, with a warning in the log, since a translation that late is no use to the conversation. On a Mac with an M4 Pro, Whisper takes about 1 second to hear a 3-second utterance; the request to Claude comes on top.
+
+### When the Voice Connection Drops
+
+The bot keeps its voice connection until `/translate-leave`. Discord closes it now and then, and the bot usually gets it back by itself within seconds. When it has been away for 15 seconds, however it dropped, the bot gives it up and joins the voice channel again on a new connection, in the channel it was last in. Each new connection has twice as long as the one before to be ready, from 5 seconds up to 60 seconds, and the bot goes on until one is. It joins again even when a moderator disconnected it; to make it stop, run `/translate-leave`. When the voice channel is gone, translation ends, and the bot says so in the text channel.
 
 ### The Speech Models
 
