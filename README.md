@@ -291,6 +291,7 @@ All configuration is done through environment variables, read from `.env`:
 | `MODELS_DIR` | Where `pnpm models:download` puts the speech models, and the bot finds them; a relative path is taken from the working directory | `models` |
 | `OLLAMA_HOST` | Where Ollama is, with `TRANSLATOR=translategemma`: a host, a host and a port, or a URL, read as Ollama reads it | `127.0.0.1:11434` |
 | `TRANSLATEGEMMA_MODEL` | The TranslateGemma model for Ollama to run: `translategemma:4b`, `:12b` or `:27b` | `translategemma:12b` |
+| `GLOSSARY_FILE` | A glossary whose terms TranslateGemma translates as it says, such as `glossaries/overwatch.tsv` (see [A Glossary](#a-glossary)), with `TRANSLATOR=translategemma` only; a relative path is taken from the working directory | None |
 | `GOOGLE_GEMINI_API_KEY` | Gemini API key | Required with `TRANSLATOR=gemini` |
 | `GEMINI_MODEL` | Gemini model to use; it must take audio | `gemini-3.8-flash` |
 | `DEFAULT_TARGET_LANGUAGE` | A language tag, or two separated by a comma for a pair, such as `ja,ko`; with `TRANSLATOR=claude` or `translategemma`, one of the [10 offered](#-supported-languages) | `ja` |
@@ -298,7 +299,7 @@ All configuration is done through environment variables, read from `.env`:
 | `RECORD_SPEECH_OF` | The Discord user ID of a member whose utterances to record as WAVE files, to measure how well the bot hears them; no one else is recorded. Record only someone who has agreed to it | None |
 | `RECORDINGS_DIR` | Where to put those recordings, with `RECORD_SPEECH_OF`; keep it outside the repository. A relative path is taken from the working directory | None |
 
-An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing speech models, credentials Claude cannot be called with, and an Ollama without the TranslateGemma model.
+An empty variable counts as unset. A missing or malformed setting stops the bot at startup, with a message that says which. So do missing speech models, credentials Claude cannot be called with, an Ollama without the TranslateGemma model, and a glossary that cannot be read.
 
 ## 🎬 How It Works
 
@@ -357,6 +358,15 @@ A translation that shows it went wrong is asked for once more, with the model ca
 - it is over three times as long as what was said, and 20 characters
 
 The second translation is posted even if it shows the same, and the log says what was wrong, never the text. Quotation marks around a whole translation are taken off. On a Mac with an M4 Pro, the 12B model takes about 1.2 seconds a language.
+
+### A Glossary
+
+With `GLOSSARY_FILE`, TranslateGemma translates the terms of a glossary as it says: names it does not know, and words said otherwise in the other language. `glossaries/overwatch.tsv` has those of Overwatch in Japanese and Korean: the heroes, some abilities, the calls, and slang said aloud. Its heroes and abilities are named as the official site names them in each language.
+
+- **The file:** as for [Comparing Translations](#comparing-translations): the two languages on the first line, then a term a line.
+- **What is asked:** the terms found in what was said, alone, are put in the prompt, such as `Translate these terms as given: マーシー → 메르시; ウルト → 궁.`, just before it asks for the translation. When the translation looks wrong and is asked for again, the terms are left out, since they may be what went wrong.
+- **Trying it:** in a trial on 40 sentences with Overwatch terms, Japanese and Korean, the translations with the glossary were found better in 11 of the 12 judged, took no longer, and looked wrong 2 times against 6 (`pnpm eval:translation --glossary`).
+- **Changing it:** the bot reads it at startup; restart the bot after changing it. A term found where it is not meant, as コピー in an everyday sentence, is translated as the glossary says.
 
 ### When TranslateGemma Fails
 

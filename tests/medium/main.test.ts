@@ -1,11 +1,11 @@
 import { describe, it, expect, afterAll, afterEach, beforeEach } from '@jest/globals';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ClaudeTextTranslator, CREDENTIALS_HINT } from '../../src/infrastructure/claude/claude-text-translator';
 import { LocalTranslator } from '../../src/infrastructure/local/local-translator';
 import { OllamaClient } from '../../src/infrastructure/ollama/ollama-client';
-import { requireClaude, requireTranslateGemma, translatorFor } from '../../src/main';
+import { readGlossary, requireClaude, requireTranslateGemma, translatorFor } from '../../src/main';
 import { FakeLogger } from '../support/fakes/fake-logger';
 import { HttpStub, type StubResponse } from '../support/http-stub';
 import { LOCAL_MODEL_TIMEOUT_MS, localModelsDir } from '../support/local-models';
@@ -302,5 +302,62 @@ describe('translatorFor, with TRANSLATOR=translategemma', () => {
 
     await expect(translatorFor(config(modelsDir), new FakeLogger())).rejects.toThrow(`The local models are missing from ${modelsDir}`);
     expect(ollama.requests).toEqual([]);
+  });
+
+  it('stops the bot at startup when the glossary cannot be read, without asking Ollama', async () => {
+    const glossaryFile = path.join(await empty, 'missing.tsv');
+
+    await expect(translatorFor({ ...config(localModelsDir()), glossaryFile }, new FakeLogger())).rejects.toThrow(
+      `GLOSSARY_FILE: cannot read ${glossaryFile}`
+    );
+    expect(ollama.requests).toEqual([]);
+  });
+});
+
+// The glossaries on this machine's disk: one the test writes, and the one the repository ships.
+describe('readGlossary', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'glossary-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('reads the glossary, and logs its file, its languages and how many terms it has', async () => {
+    const file = path.join(dir, 'overwatch.tsv');
+    await writeFile(file, '# heroes\nja\tko\nマーシー\t메르시\nウルト\t궁\n');
+    const logger = new FakeLogger();
+
+    const glossary = await readGlossary(file, logger);
+
+    expect(glossary.size).toBe(2);
+    expect(logger.entries).toEqual([
+      { level: 'info', message: 'Translating the terms of a glossary as it says', meta: { file, languages: ['ja', 'ko'], terms: 2 } },
+    ]);
+  });
+
+  it('stops the bot when the file cannot be read, naming it', async () => {
+    const file = path.join(dir, 'missing.tsv');
+
+    await expect(readGlossary(file, new FakeLogger())).rejects.toThrow(`GLOSSARY_FILE: cannot read ${file} (ENOENT)`);
+  });
+
+  it('stops the bot when the glossary is malformed, saying where', async () => {
+    const file = path.join(dir, 'overwatch.tsv');
+    await writeFile(file, 'ja\tko\nマーシー\n');
+
+    await expect(readGlossary(file, new FakeLogger())).rejects.toThrow(
+      `GLOSSARY_FILE: Line 2 of the glossary is not two columns of terms separated by a tab, in ${file}`
+    );
+  });
+
+  it('reads the Overwatch glossary the repository ships, in Japanese and Korean', async () => {
+    const glossary = await readGlossary(path.join(__dirname, '../../glossaries/overwatch.tsv'), new FakeLogger());
+
+    expect(glossary.languages.map((language) => language.tag)).toEqual(['ja', 'ko']);
+    expect(glossary.size).toBeGreaterThan(50);
   });
 });

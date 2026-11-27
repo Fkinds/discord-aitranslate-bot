@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { getVoiceConnections } from '@discordjs/voice';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import dotenv from 'dotenv';
@@ -15,6 +16,7 @@ import { WhisperRecognizer } from './infrastructure/local/whisper-recognizer';
 import { OllamaClient, OllamaRequestFailed } from './infrastructure/ollama/ollama-client';
 import { isOnThisMachine } from './infrastructure/ollama/ollama-host';
 import { PlaceholderTranslator } from './infrastructure/placeholder-translator';
+import { Glossary, GlossaryMalformed } from './infrastructure/translategemma/glossary';
 import { TranslateGemmaTextTranslator } from './infrastructure/translategemma/translategemma-text-translator';
 import { createLogger } from './infrastructure/winston-logger';
 import { CommandHandler } from './interfaces/discord/command-handler';
@@ -124,6 +126,36 @@ export async function requireTranslateGemma(ollama: OllamaClient, model: string,
   }
 }
 
+/**
+ * The glossary in `file`, which GLOSSARY_FILE names, read at startup, and
+ * logged: its file, its languages and how many terms it has.
+ *
+ * @throws Error when the file cannot be read, or the glossary is malformed, saying which.
+ */
+export async function readGlossary(file: string, logger: Logger): Promise<Glossary> {
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (error) {
+    // The system's code for why, such as ENOENT; the message would name the file again.
+    const why = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : String(error);
+    throw new Error(`GLOSSARY_FILE: cannot read ${file} (${why})`, { cause: error });
+  }
+  let glossary: Glossary;
+  try {
+    glossary = Glossary.parse(text);
+  } catch (error) {
+    if (!(error instanceof GlossaryMalformed)) throw error;
+    throw new Error(`GLOSSARY_FILE: ${error.message}, in ${file}`, { cause: error });
+  }
+  logger.info('Translating the terms of a glossary as it says', {
+    file,
+    languages: glossary.languages.map((language) => language.tag),
+    terms: glossary.size,
+  });
+  return glossary;
+}
+
 /** Whisper, from the models in `modelsDir`, which it loads now, so that the first utterance does not wait for them. */
 async function loadWhisper(modelsDir: string, logger: Logger): Promise<WhisperRecognizer> {
   logger.info('Loading the local models', { modelsDir });
@@ -147,9 +179,13 @@ async function loadWhisper(modelsDir: string, logger: Logger): Promise<WhisperRe
  * With TranslateGemma, it is the same, but that the bot stops when Ollama does
  * not have the model, and loads it. Each request to Ollama may take 15 s; one
  * that could not be sent, or that Ollama failed, is tried again once, 1 s later.
+ * With GLOSSARY_FILE, TranslateGemma translates the terms of the glossary as it
+ * says (TranslateGemmaTextTranslator), and the bot stops at startup when it
+ * cannot read the glossary, before asking Ollama.
  *
  * @throws Error when the local models are missing or cannot be loaded, Claude
- *   cannot be called, or Ollama does not have TranslateGemma.
+ *   cannot be called, Ollama does not have TranslateGemma, or the glossary
+ *   cannot be read.
  */
 export async function translatorFor(config: TranslatorConfig, logger: Logger, clock: Clock = () => new Date()): Promise<Translator> {
   switch (config.kind) {
@@ -162,10 +198,11 @@ export async function translatorFor(config: TranslatorConfig, logger: Logger, cl
     }
     case 'translategemma': {
       await requireModels(LOCAL_MODEL_FILES, config.modelsDir);
+      const glossary = config.glossaryFile === undefined ? undefined : await readGlossary(config.glossaryFile, logger);
       const ollama = new OllamaClient(new URL(config.ollamaUrl), OLLAMA_OPTIONS);
       await requireTranslateGemma(ollama, config.model, logger);
       const recognizer = await loadWhisper(config.modelsDir, logger);
-      const translateGemma = new TranslateGemmaTextTranslator(ollama, config.model, logger);
+      const translateGemma = new TranslateGemmaTextTranslator(ollama, config.model, logger, glossary);
       return new LocalTranslator(recognizer, translateGemma, clock, logger, LOCAL_OPTIONS);
     }
     case 'gemini':
