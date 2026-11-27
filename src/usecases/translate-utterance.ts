@@ -16,8 +16,12 @@ export type TranslateUtteranceResult =
   | { readonly kind: 'nothingHeard' }
   /** Something was said, but translated into none of the languages it is to be posted in; nothing was posted. */
   | { readonly kind: 'notTranslated' }
-  /** The translator gave up on it for waiting too long behind the utterances before it; nothing was posted. */
-  | { readonly kind: 'abandoned'; readonly waitedMs: number }
+  /**
+   * The translator gave up on it for waiting too long behind the utterances
+   * before it; nothing was posted. `audioMs` is how long it lasted, which
+   * tells a sentence from a cough.
+   */
+  | { readonly kind: 'abandoned'; readonly waitedMs: number; readonly audioMs: number }
   | { readonly kind: 'notRunning' };
 
 /**
@@ -55,7 +59,7 @@ export class TranslateUtterance {
     try {
       heard = await this.translator.translate(audio, session.languages);
     } catch (error) {
-      if (error instanceof TranslationAbandoned) return { kind: 'abandoned', waitedMs: error.waitedMs };
+      if (error instanceof TranslationAbandoned) return { kind: 'abandoned', waitedMs: error.waitedMs, audioMs: audio.durationMs };
       throw error;
     }
     if (heard.original.trim() === '') return { kind: 'nothingHeard' };

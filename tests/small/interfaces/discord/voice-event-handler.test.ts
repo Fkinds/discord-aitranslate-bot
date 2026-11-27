@@ -87,7 +87,7 @@ describe('VoiceEventHandler', () => {
     expect(logger.messages('info')).toEqual(['Utterance not translated; nothing posted']);
   });
 
-  it('warns of an utterance dropped for waiting too long, with how long it waited, and posts nothing', async () => {
+  it('warns of an utterance dropped for waiting too long, with how long it waited and lasted, and posts nothing', async () => {
     sessions.save(aSession());
     translator.failNext(new TranslationAbandoned(12_000));
 
@@ -97,7 +97,7 @@ describe('VoiceEventHandler', () => {
     expect(logger.entries).toContainEqual({
       level: 'warn',
       message: 'Dropped an utterance that waited too long to be translated',
-      meta: { guildId: '1', userId: '30', waitedMs: 12_000 },
+      meta: { guildId: '1', userId: '30', waitedMs: 12_000, audioMs: 100 },
     });
     expect(logger.messages('error')).toEqual([]);
   });

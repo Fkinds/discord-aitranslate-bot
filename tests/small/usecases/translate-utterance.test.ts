@@ -173,7 +173,7 @@ describe('TranslateUtterance', () => {
 
     const result = await translateUtterance.execute(utterance());
 
-    expect(result).toEqual({ kind: 'abandoned', waitedMs: 12_000 });
+    expect(result).toEqual({ kind: 'abandoned', waitedMs: 12_000, audioMs: 100 });
     expect(publisher.posts).toEqual([]);
   });
 
@@ -197,5 +197,14 @@ describe('SpeechAudio', () => {
   it('is empty when nothing was heard', () => {
     expect(SILENCE.isEmpty).toBe(true);
     expect(SPEECH.isEmpty).toBe(false);
+  });
+
+  it.each([
+    ['nothing', 0, 0],
+    ['one sample', 2, 0.0625],
+    ['3200 bytes, a tenth of a second', 3200, 100],
+    ['a second', 32_000, 1000],
+  ])('lasts as long as its samples at 16 kHz: %s', (_case, bytes, ms) => {
+    expect(SpeechAudio.fromPcm(new Uint8Array(bytes)).durationMs).toBe(ms);
   });
 });
