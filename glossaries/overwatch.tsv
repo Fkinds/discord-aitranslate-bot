@@ -1,0 +1,116 @@
+# The terms of Overwatch in Japanese and Korean, for TranslateGemma to
+# translate as players say them (GLOSSARY_FILE, with TRANSLATOR=translategemma).
+# The first line names the languages; then a term a line. The ways of writing
+# a term are separated by |, the first being the one to translate into, and
+# each is on one line only. A line that starts with # is a note.
+#
+# The heroes' and abilities' names are those of the official site, in Japanese
+# and in Korean, read on 2026-11-28:
+#   https://overwatch.blizzard.com/ja-jp/heroes/ and https://overwatch.blizzard.com/ko-kr/heroes/
+# The ways written after a hero's name are short names and old names, not
+# official. The calls and the slang are those players say in voice chat.
+ja	ko
+
+# Heroes
+ドクトリン	독트린
+D.Mon	D.Mon
+D.Va|ディーバ	D.Va|디바
+アッシュ	애쉬
+アナ	아나
+アンラン	안란
+イラリー	일리아리
+ウーヤン	우양
+ウィドウメイカー|ウィドウ	위도우메이커|위도우
+ウィンストン	윈스턴
+ヴェンデッタ	벤데타
+エコー	에코
+エムレ	엠레
+オリーサ	오리사
+キャスディ|マクリー	캐서디|맥크리
+キリコ	키리코
+ゲンジ	겐지
+ザリア	자리야
+シエラ	시에라
+シオン	시온
+シグマ	시그마
+シンメトラ|シンメ	시메트라|시메
+ジェットパック・キャット	제트팩 캣
+ジャンカー・クイーン|ジャンクイーン|JQ	정커퀸|퀸
+ジャンクラット	정크랫
+ジュノ	주노
+ゼニヤッタ|ゼニ	젠야타|젠
+ソジョーン	소전
+ソルジャー76|ソルジャー	솔저: 76|솔저
+ソンブラ	솜브라
+トールビョーン|トール	토르비욘|토르
+トレーサー	트레이서
+ドゥームフィスト|ドゥーム	둠피스트|둠
+ドミナ	도미나
+ハザード	해저드
+ハンゾー	한조
+バスティオン	바스티온
+バティスト|バティ	바티스트|바티
+ファラ	파라
+フレイヤ	프레야
+ブリギッテ|ブリギ	브리기테|브리
+ベンチャー	벤처
+マーシー	메르시
+マウガ	마우가
+ミズキ	미즈키
+メイ	메이
+モイラ	모이라
+ライフウィーバー|ウィーバー	라이프위버|위버
+ラインハルト|ライン	라인하르트|라인
+ラマットラ|ラマ	라마트라|라마
+リーパー	리퍼
+ルシオ	루시우
+レッキング・ボール|ハモンド	레킹볼|햄찌
+ロードホッグ	로드호그
+
+# Abilities, of 15 heroes: on each hero's page, the ability at the same place
+# in the Japanese and the Korean page.
+#   https://overwatch.blizzard.com/ja-jp/heroes/<hero>/ and https://overwatch.blizzard.com/ko-kr/heroes/<hero>/
+# コピー and 自爆 are everyday words too, so they are found outside the game.
+ヴァルキリー	발키리
+デリヴァランス	구제
+メック召喚	메카 호출
+自爆	자폭
+B.O.B	B.O.B.
+ナノ・ブースト	나노 강화제
+焚身焔	점화
+コピー	복제
+オルタード・バイタル	생체 신호 변조
+テラ・サージ	대지의 창
+デッド・アイ	황야의 무법자
+鈴のご加護	정화의 방울
+サイバー体術	사이보그의 날렵함
+アウトバースト	분출
+守衛波浪	수호의 파도
+
+# Calls
+ウルト|ult	궁|궁극기
+フォーカス	점사
+タンク	탱커|탱
+ヒーラー	힐러
+アタッカー|DPS	딜러|딜
+ダイブ	다이브
+ポーク	포킹
+ペイロード|荷物	화물
+拠点	거점
+リスポーン|リス	리스폰
+ワンパン|ワンショット	한방
+ピック	픽
+ナノ	나노
+グラビ|グラビトン	중력자탄
+ハック	해킹
+ヒール	힐
+
+# Slang said aloud
+草	ㅋㅋㅋ
+ナイス	나이스
+GG|ジージー	GG|지지
+ガチ	레알
+それな	인정
+エグい	미쳤다
+詰んだ	망했다
+おつかれ|乙|おつ	수고
