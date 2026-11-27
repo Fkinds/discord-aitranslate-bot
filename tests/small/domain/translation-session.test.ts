@@ -78,6 +78,30 @@ describe('TranslationSession', () => {
 
   });
 
+  describe('movedTo', () => {
+    it('returns a session in the other voice channel, posting where it did in the same languages', () => {
+      const session = startSession();
+
+      const moved = session.movedTo(ChannelId.of('11'));
+
+      expect(moved.voiceChannelId.equals(ChannelId.of('11'))).toBe(true);
+      expect(moved.textChannelId.equals(ChannelId.of('20'))).toBe(true);
+      expect(moved.languages.equals(session.languages)).toBe(true);
+      expect(moved.startedAt).toEqual(STARTED_AT);
+      expect(moved.equals(session)).toBe(true);
+    });
+
+    it('forgets who was speaking, and leaves this one as it was', () => {
+      const session = startSession().speakerStarted(UserId.of('100'));
+
+      const moved = session.movedTo(ChannelId.of('11'));
+
+      expect(moved.activeSpeakers).toEqual([]);
+      expect(session.activeSpeakers.map((id) => id.value)).toEqual(['100']);
+      expect(session.voiceChannelId.equals(ChannelId.of('10'))).toBe(true);
+    });
+  });
+
   describe('speakers', () => {
     it('adds a speaker once, however often they start speaking', () => {
       const session = startSession()
