@@ -181,6 +181,17 @@ describe('CommandHandler', () => {
       expect(answers[1]).toEqual({ via: 'editReply', content: '❌ Already translating in <#99>' });
     });
 
+    it("joins the member's channel again when the connection is away, and says so", async () => {
+      sessions.save(aSession({ voice: '99' }));
+      voice.drop(GuildId.of('1'));
+
+      const answers = await handle(new FakeInteraction('translate-join', { voiceChannel: GENERAL }));
+
+      expect(answers[1]).toEqual({ via: 'editReply', content: '🔄 Joined **General** again; translating to **Japanese (日本語)**' });
+      expect(voice.rejoins).toEqual([{ guildId: '1', voiceChannelId: '10' }]);
+      expect(logger.messages('info')).toContain('Joined the voice channel again, as asked');
+    });
+
     it('says why joining failed, and logs it', async () => {
       voice.failNextJoin(new VoiceConnectionFailed('timed out'));
 

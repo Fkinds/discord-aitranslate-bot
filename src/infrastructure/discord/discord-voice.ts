@@ -150,6 +150,31 @@ export class DiscordVoice implements VoiceConnector {
     getVoiceConnection(guildId.value)?.destroy();
   }
 
+  isReady(guildId: GuildId): boolean {
+    return this.kept.get(guildId.value)?.connection.state.status === VoiceConnectionStatus.Ready;
+  }
+
+  async rejoin(guildId: GuildId, voiceChannelId: ChannelId): Promise<void> {
+    const guild = this.client.guilds.cache.get(guildId.value);
+    if (!guild) throw new VoiceConnectionFailed(`The bot is not in server ${guildId.value}`);
+    if (!this.kept.has(guildId.value)) return this.join(guildId, voiceChannelId);
+
+    this.logger.info('Joining the voice channel again, as asked', { guildId: guildId.value, channelId: voiceChannelId.value });
+    // Not kept while it is destroyed, so that it is not taken for the bot leaving.
+    this.stopKeeping(guildId)?.destroy();
+    const connection = this.connect(guildId, guild.voiceAdapterCreator as DiscordGatewayAdapterCreator, {
+      channelId: voiceChannelId.value,
+      attempts: 0,
+      readyWithinMs: this.options.stuckAfterMs,
+    });
+    this.beginOutage(guildId);
+    try {
+      await entersState(connection, VoiceConnectionStatus.Ready, this.options.readyTimeoutMs);
+    } catch {
+      // Not ready yet: it is joined again until it is.
+    }
+  }
+
   /** Join the channel on a new connection, keep it, and give it `readyWithinMs` to be ready. */
   private connect(
     guildId: GuildId,

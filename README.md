@@ -233,6 +233,8 @@ Join your voice channel and start translating what is said there into the channe
 
 With neither, the bot uses `DEFAULT_TARGET_LANGUAGE`. With only `second-language`, it pairs it with the first language of `DEFAULT_TARGET_LANGUAGE`.
 
+While the bot is translating, but its voice connection is away (see [When the Voice Connection Drops](#when-the-voice-connection-drops)), `/translate-join` joins your voice channel again at once, rather than wait for the next time the bot would have, and goes on translating there in the languages it had.
+
 When translation starts, the bot tells everyone in the text channel where what is said in the voice channel goes: that it is transcribed on the bot's own machine and the text is sent to Anthropic's Claude to be translated, that it is sent to Google Gemini (`TRANSLATOR=gemini`), or that it is sent nowhere (`TRANSLATOR=fake`).
 
 Examples:

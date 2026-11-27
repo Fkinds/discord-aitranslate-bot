@@ -24,11 +24,20 @@ export interface StartTranslationCommand {
 
 export type StartTranslationResult =
   | { readonly kind: 'started'; readonly session: TranslationSession }
+  /** A session was running, but its connection was away: the bot joined the requester's channel again. */
+  | { readonly kind: 'rejoined'; readonly session: TranslationSession }
   | { readonly kind: 'requesterNotInVoiceChannel' }
   | { readonly kind: 'sameLanguageTwice' }
   | { readonly kind: 'alreadyRunning'; readonly session: TranslationSession };
 
-/** Join the requester's voice channel and start translating what is said there. */
+/**
+ * Join the requester's voice channel and start translating what is said there.
+ *
+ * When the server's session is running, but its voice connection is away,
+ * the bot joins the requester's channel again at once, rather than wait for
+ * the next time it would have, and goes on translating there in the session's
+ * languages: the languages asked for apply only to a session that starts.
+ */
 export class StartTranslation {
   constructor(
     private readonly sessions: SessionStore,
@@ -37,7 +46,10 @@ export class StartTranslation {
     private readonly defaultLanguages: TranslationLanguages
   ) {}
 
-  /** @throws VoiceConnectionFailed when joining fails; no session is left behind. */
+  /**
+   * @throws VoiceConnectionFailed when joining fails; no session is left
+   *   behind. When joining again, only when the bot is not in the server.
+   */
   async execute(command: StartTranslationCommand): Promise<StartTranslationResult> {
     // Checked in the order the bot has always checked them, after the
     // languages, which it did not have to check.
@@ -45,7 +57,13 @@ export class StartTranslation {
     if (!languages) return { kind: 'sameLanguageTwice' };
     if (!command.requesterVoiceChannelId) return { kind: 'requesterNotInVoiceChannel' };
     const running = this.sessions.find(command.guildId);
-    if (running) return { kind: 'alreadyRunning', session: running };
+    if (running) {
+      if (this.voice.isReady(running.guildId)) return { kind: 'alreadyRunning', session: running };
+      const moved = running.movedTo(command.requesterVoiceChannelId);
+      this.sessions.save(moved);
+      await this.voice.rejoin(moved.guildId, moved.voiceChannelId);
+      return { kind: 'rejoined', session: moved };
+    }
 
     const session = TranslationSession.start({
       guildId: command.guildId,

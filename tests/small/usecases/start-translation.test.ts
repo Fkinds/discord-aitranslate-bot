@@ -89,6 +89,22 @@ describe('StartTranslation', () => {
 
     expect(result).toEqual({ kind: 'alreadyRunning', session: running });
     expect(voice.joins).toEqual([]);
+    expect(voice.rejoins).toEqual([]);
+  });
+
+  it("joins the requester's channel again at once when the session's connection is away", async () => {
+    sessions.save(aSession({ voice: '99', text: '20', language: 'ko' }));
+    voice.drop(GuildId.of('1'));
+
+    const result = await startTranslation.execute(command({ voice: '10', language: 'en' }));
+
+    const session = sessions.find(GuildId.of('1'));
+    expect(result).toEqual({ kind: 'rejoined', session });
+    expect(voice.rejoins).toEqual([{ guildId: '1', voiceChannelId: '10' }]);
+    expect(voice.joins).toEqual([]);
+    expect(session?.voiceChannelId.value).toBe('10');
+    expect(session?.languages.toString()).toBe('ko');
+    expect(session?.textChannelId.value).toBe('20');
   });
 
   it('checks the voice channel before the running session, as the bot always has', async () => {

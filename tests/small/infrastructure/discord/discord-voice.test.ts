@@ -169,6 +169,73 @@ describe('DiscordVoice', () => {
     });
   });
 
+  describe('isReady', () => {
+    it('is ready only while the connection is', async () => {
+      expect(voice.isReady(GUILD)).toBe(false);
+
+      await voice.join(GUILD, VOICE);
+      expect(voice.isReady(GUILD)).toBe(false);
+
+      first().becomes(VoiceConnectionStatus.Ready);
+      expect(voice.isReady(GUILD)).toBe(true);
+
+      first().becomes(VoiceConnectionStatus.Connecting);
+      expect(voice.isReady(GUILD)).toBe(false);
+    });
+
+    it('is not ready once the bot leaves', async () => {
+      await voice.join(GUILD, VOICE);
+      first().becomes(VoiceConnectionStatus.Ready);
+      jest.mocked(getVoiceConnection).mockReturnValue(undefined);
+
+      await voice.leave(GUILD);
+
+      expect(voice.isReady(GUILD)).toBe(false);
+    });
+  });
+
+  describe('rejoin', () => {
+    beforeEach(async () => {
+      await voice.join(GUILD, VOICE);
+      first().becomes(VoiceConnectionStatus.Ready);
+      first().becomes(VoiceConnectionStatus.Signalling);
+    });
+
+    it('joins the channel again at once on a new connection, and waits for it', async () => {
+      await voice.rejoin(GUILD, ChannelId.of('11'));
+
+      expect(first().destroy).toHaveBeenCalled();
+      expect(connections).toHaveLength(2);
+      expect(last().joinConfig.channelId).toBe('11');
+      expect(connectionEntersState).toHaveBeenLastCalledWith(last() as unknown as VoiceConnection, VoiceConnectionStatus.Ready, 10_000);
+      expect(listener.events).toEqual([]);
+    });
+
+    it('goes on joining again when the new connection is not ready', async () => {
+      connectionEntersState.mockRejectedValue(new Error('The operation was aborted'));
+
+      await expect(voice.rejoin(GUILD, VOICE)).resolves.toBeUndefined();
+      jest.advanceTimersByTime(15_000);
+
+      expect(connections).toHaveLength(3);
+    });
+
+    it('joins when the bot has no connection in the server', async () => {
+      jest.mocked(getVoiceConnection).mockReturnValue(undefined);
+      await voice.leave(GUILD);
+
+      await voice.rejoin(GUILD, VOICE);
+
+      expect(connections).toHaveLength(2);
+      expect(last().destroy).not.toHaveBeenCalled();
+    });
+
+    it('fails in a server the bot is not in', async () => {
+      await expect(voice.rejoin(GuildId.of('2'), VOICE)).rejects.toThrow(VoiceConnectionFailed);
+      expect(connections).toHaveLength(1);
+    });
+  });
+
   describe('what it hears', () => {
     beforeEach(async () => {
       await voice.join(GUILD, VOICE);
