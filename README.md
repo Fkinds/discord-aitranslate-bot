@@ -460,7 +460,7 @@ For each way, it gives the character error rate, the sentences heard in the righ
 To choose the model that translates, have several translate the same sentences, and judge them without knowing which is which:
 
 ```bash
-pnpm eval:translation <dir> [--models translategemma:12b,gemma4:12b-it-qat] [--back]
+pnpm eval:translation <dir> [--models translategemma:12b,gemma4:12b-it-qat] [--back] [--glossary <file>]
 ```
 
 - **The sentences:** it takes those of `<dir>/sentences.tsv`, in two languages, and translates each into the other one.
@@ -469,6 +469,16 @@ pnpm eval:translation <dir> [--models translategemma:12b,gemma4:12b-it-qat] [--b
   - `translations.md`: each sentence with its translations as A, B, C, in an order shuffled for each sentence, to judge.
   - `translations-key.md`: which model each letter is, the median time a sentence took, and how often TranslateGemma's translation looked wrong.
 - **`--back`:** translates each translation back with TranslateGemma 12B, for someone who reads only the language it came from. It is a rough check.
+- **`--glossary <file>`:** each TranslateGemma model also translates with the glossary, to tell whether it helps. TranslateGemma is then asked to translate the terms of the glossary found in each sentence as it says; when it asks again because the translation looked wrong, it asks without them. The bot itself uses no glossary.
+  - **The file:** a term a line, in Japanese and in Korean, separated by a tab. Each may be written several ways separated by `|`, the first being the one to translate into. A line that starts with `#` is a note.
+
+    ```
+    # Heroes
+    マーシー	메르시|메르
+    ウルト|ult	궁|궁극기
+    ```
+  - **Finding the terms:** a term is found wherever a sentence holds it, even within a longer word, since Japanese has no spaces between words; where terms overlap, the longest is taken. Full-width and half-width letters, and capitals, are found alike (Unicode Normalization Form KC, in lower case). A short term may be found where it is not meant, as アナ in アナウンス.
+  - **What it writes:** a sentence whose translations are all the same, as when none of its terms were found, says so in `translations.md`, with nothing to judge. `translations-key.md` lists the terms found in each sentence, and how many were all the same.
 - **Memory:** it loads the models one at a time, and takes each out of memory when done, the bot's too. The bot's next translation then loads its model again first.
 
 ### Dependency Updates

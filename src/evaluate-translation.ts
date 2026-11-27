@@ -4,10 +4,12 @@ import dotenv from 'dotenv';
 import { LanguageCode } from './domain/language-code';
 import { blindOrder } from './infrastructure/evaluation/blind';
 import { sentencesIn, type Sentence } from './infrastructure/evaluation/recordings';
+import { allTheSame, type Variant, variantName, variantsOf } from './infrastructure/evaluation/variants';
 import { englishNameOf } from './infrastructure/local/languages';
 import type { TextTranslator } from './infrastructure/local/text-translator';
 import { OllamaClient } from './infrastructure/ollama/ollama-client';
 import { ollamaUrlFrom } from './infrastructure/ollama/ollama-host';
+import { Glossary } from './infrastructure/translategemma/glossary';
 import { unquoted } from './infrastructure/translategemma/output-check';
 import { TranslateGemmaTextTranslator } from './infrastructure/translategemma/translategemma-text-translator';
 import type { Logger } from './usecases/ports/logger';
@@ -18,8 +20,10 @@ const DEFAULT_MODELS = ['translategemma:12b', 'translategemma:12b-it-q8_0', 'gem
 const BACK_MODEL = 'translategemma:12b';
 /** How long a translation may take; a model may also be loaded first. */
 const OLLAMA_OPTIONS = { timeoutMs: 120_000, retryDelayMs: 1_000 };
+/** The languages of the glossary's two columns. */
+const GLOSSARY_LANGUAGES = [LanguageCode.of('ja'), LanguageCode.of('ko')] as const;
 
-const USAGE = `Usage: pnpm eval:translation <directory> [--models <model>,<model>,...] [--back]
+const USAGE = `Usage: pnpm eval:translation <directory> [--models <model>,<model>,...] [--back] [--glossary <file>]
 
 Has each model translate the sentences in <directory>/sentences.tsv (one a
 line, the language and the text separated by a tab) into the other language of
@@ -29,6 +33,9 @@ the two, and writes:
   translations-key.md  which model each letter is, and how long each took
 With --back, each translation is also translated back with ${BACK_MODEL}, for a
 rough check by someone who reads only the source language.
+With --glossary, each TranslateGemma model also translates with the glossary
+in <file> (a term a line, Japanese and Korean separated by a tab), asked to
+translate the terms found in each sentence as it says; the key lists them.
 Models: ${DEFAULT_MODELS.join(', ')} by default; Ollama must have them.`;
 
 /**
@@ -73,7 +80,7 @@ interface Translation {
   readonly ms: number;
 }
 
-async function evaluate(dir: string, models: readonly string[], back: boolean): Promise<void> {
+async function evaluate(dir: string, models: readonly string[], back: boolean, glossary: Glossary | undefined): Promise<void> {
   const sentences = sentencesIn(await readFile(path.join(dir, 'sentences.tsv'), 'utf8'));
   const languages = [...new Set(sentences.map((sentence) => sentence.language))];
   if (languages.length !== 2) throw new Error(`sentences.tsv must be in two languages, got ${languages.join(', ')}`);
@@ -82,14 +89,19 @@ async function evaluate(dir: string, models: readonly string[], back: boolean): 
   const ollama = new OllamaClient(ollamaUrlFrom(process.env.OLLAMA_HOST || undefined), OLLAMA_OPTIONS);
   const backTranslator = new TranslateGemmaTextTranslator(ollama, BACK_MODEL, new CountingLogger());
 
+  const variants = variantsOf(models, glossary !== undefined);
+  const names = variants.map(variantName);
+  const translatorFor = (variant: Variant, logger: Logger): TextTranslator =>
+    variant.model.startsWith('translategemma')
+      ? new TranslateGemmaTextTranslator(ollama, variant.model, logger, variant.glossary ? glossary : undefined)
+      : new GeneralModelTranslator(ollama, variant.model);
+
   const results = new Map<string, Translation[]>();
   const wrong = new Map<string, number>();
-  for (const model of models) {
+  for (const [v, variant] of variants.entries()) {
     const logger = new CountingLogger();
-    const translator = model.startsWith('translategemma')
-      ? new TranslateGemmaTextTranslator(ollama, model, logger)
-      : new GeneralModelTranslator(ollama, model);
-    console.log(`Translating ${sentences.length} sentences with ${model}`);
+    const translator = translatorFor(variant, logger);
+    console.log(`Translating ${sentences.length} sentences with ${variantName(variant)}`);
     const translations: Translation[] = [];
     for (const sentence of sentences) {
       const from = LanguageCode.of(sentence.language);
@@ -98,9 +110,10 @@ async function evaluate(dir: string, models: readonly string[], back: boolean): 
       const ms = performance.now() - started;
       translations.push({ text: translated?.text ?? '', ms });
     }
-    await ollama.unload(model);
-    results.set(model, translations);
-    wrong.set(model, logger.wrong);
+    // A model with the glossary comes right after it: keep it loaded for that.
+    if (variants[v + 1]?.model !== variant.model) await ollama.unload(variant.model);
+    results.set(variantName(variant), translations);
+    wrong.set(variantName(variant), logger.wrong);
   }
 
   if (back) {
@@ -120,24 +133,39 @@ async function evaluate(dir: string, models: readonly string[], back: boolean): 
     await ollama.unload(BACK_MODEL);
   }
 
-  const letters = models.map((_, i) => String.fromCharCode(65 + i));
+  const letters = names.map((_, i) => String.fromCharCode(65 + i));
+  const termsColumn = glossary ? ' Terms found |' : '';
   const blind = [`# Translations to judge\n`, `Each sentence, then its translations in an order shuffled for it.\n`];
-  const key = [`# Which model each letter is\n`, `| # | ${letters.join(' | ')} |`, `|---|${letters.map(() => '---').join('|')}|`];
+  const key = [
+    `# Which model each letter is\n`,
+    `| # | ${letters.join(' | ')} |${termsColumn}`,
+    `|---|${letters.map(() => '---').join('|')}|${glossary ? '---|' : ''}`,
+  ];
+  const shown = (translation: Translation) => `${translation.text}${translation.back === undefined ? '' : ` (back: ${translation.back})`}`;
+  let same = 0;
   for (const [i, sentence] of sentences.entries()) {
-    const order = blindOrder(models.length, i + 1);
+    const order = blindOrder(names.length, i + 1);
+    const translations = names.map((name) => results.get(name)![i]!);
     blind.push(`## ${i + 1}. ${sentence.language} → ${other(sentence).tag}\n\n${sentence.text}\n`);
-    for (const [place, index] of order.entries()) {
-      const translation = results.get(models[index]!)![i]!;
-      blind.push(`- **${letters[place]}:** ${translation.text}${translation.back === undefined ? '' : ` (back: ${translation.back})`}`);
+    if (allTheSame(translations.map((translation) => translation.text))) {
+      // Nothing to tell between them, so nothing to judge.
+      same++;
+      blind.push(`- **All the same:** ${shown(translations[0]!)}`);
+    } else {
+      for (const [place, index] of order.entries()) blind.push(`- **${letters[place]}:** ${shown(translations[index]!)}`);
     }
     blind.push('');
-    key.push(`| ${i + 1} | ${order.map((index) => models[index]).join(' | ')} |`);
+    const terms = glossary?.termsIn(sentence.text, LanguageCode.of(sentence.language), other(sentence)) ?? [];
+    const found = terms.map(({ said, translation }) => `${said} → ${translation}`).join(', ') || '—';
+    key.push(`| ${i + 1} | ${order.map((index) => names[index]).join(' | ')} |${glossary ? ` ${found} |` : ''}`);
   }
+  key.push(`\nAll the same, so not to judge: ${same} of ${sentences.length} sentences.`);
   key.push(`\n| Model | Median time a sentence | Looked wrong, so translated again |\n|---|---|---|`);
-  for (const model of models) {
-    const times = results.get(model)!.map((translation) => translation.ms).sort((a, b) => a - b);
+  for (const [v, variant] of variants.entries()) {
+    const name = names[v]!;
+    const times = results.get(name)!.map((translation) => translation.ms).sort((a, b) => a - b);
     const median = times[Math.floor((times.length - 1) / 2)] ?? 0;
-    key.push(`| ${model} | ${Math.round(median)} ms | ${model.startsWith('translategemma') ? wrong.get(model) : '—'} |`);
+    key.push(`| ${name} | ${Math.round(median)} ms | ${variant.model.startsWith('translategemma') ? wrong.get(name) : '—'} |`);
   }
 
   await writeFile(path.join(dir, 'translations.md'), blind.join('\n'));
@@ -148,14 +176,19 @@ async function evaluate(dir: string, models: readonly string[], back: boolean): 
 async function main(): Promise<void> {
   dotenv.config({ quiet: true });
   const args = process.argv.slice(2);
-  const modelsAt = args.indexOf('--models');
-  const models = modelsAt < 0 ? DEFAULT_MODELS : (args[modelsAt + 1] ?? '').split(',').filter(Boolean);
-  const dir = args.find((arg, i) => !arg.startsWith('--') && !(modelsAt >= 0 && i === modelsAt + 1));
-  if (!dir || models.length === 0) {
+  const valueOf = (option: string) => (args.includes(option) ? (args[args.indexOf(option) + 1] ?? '') : undefined);
+  const values = ['--models', '--glossary'].filter((option) => args.includes(option)).map((option) => args.indexOf(option) + 1);
+  const models = (valueOf('--models') ?? DEFAULT_MODELS.join(',')).split(',').filter(Boolean);
+  const glossaryFile = valueOf('--glossary');
+  const dir = args.find((arg, i) => !arg.startsWith('--') && !values.includes(i));
+  if (!dir || models.length === 0 || glossaryFile === '') {
     console.error(USAGE);
     process.exit(2);
   }
-  await evaluate(path.resolve(dir), models, args.includes('--back'));
+  const glossary =
+    glossaryFile === undefined ? undefined : Glossary.parse(await readFile(path.resolve(glossaryFile), 'utf8'), GLOSSARY_LANGUAGES);
+  if (glossary) console.log(`Read ${glossary.size} terms from ${glossaryFile}`);
+  await evaluate(path.resolve(dir), models, args.includes('--back'), glossary);
 }
 
 main().catch((error: unknown) => {
