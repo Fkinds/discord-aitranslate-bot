@@ -10,7 +10,8 @@ import type { VoiceListener } from './discord-voice';
 /** Writes the bytes to the file, making the directories it is in. */
 export type WriteFile = (file: string, bytes: Buffer) => Promise<void>;
 
-async function writeMakingDirectories(file: string, bytes: Buffer): Promise<void> {
+/** The WriteFile the listener uses unless told otherwise. */
+export async function writeMakingDirectories(file: string, bytes: Buffer): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, bytes);
 }
