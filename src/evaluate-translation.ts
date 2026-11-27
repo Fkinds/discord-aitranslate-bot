@@ -118,17 +118,16 @@ async function evaluate(dir: string, models: readonly string[], back: boolean, g
 
   if (back) {
     console.log(`Translating back with ${BACK_MODEL}`);
-    for (const [model, translations] of results) {
-      results.set(
-        model,
-        await Promise.all(
-          translations.map(async (translation, i) => {
-            const sentence = sentences[i]!;
-            const [returned] = await backTranslator.translate(translation.text, other(sentence), [LanguageCode.of(sentence.language)]);
-            return { ...translation, back: returned?.text ?? '' };
-          })
-        )
-      );
+    // One at a time, as the translations were: sent all at once, the requests
+    // wait in Ollama for those before them, and the last ones time out.
+    for (const [name, translations] of results) {
+      const returned: Translation[] = [];
+      for (const [i, translation] of translations.entries()) {
+        const sentence = sentences[i]!;
+        const [translatedBack] = await backTranslator.translate(translation.text, other(sentence), [LanguageCode.of(sentence.language)]);
+        returned.push({ ...translation, back: translatedBack?.text ?? '' });
+      }
+      results.set(name, returned);
     }
     await ollama.unload(BACK_MODEL);
   }
