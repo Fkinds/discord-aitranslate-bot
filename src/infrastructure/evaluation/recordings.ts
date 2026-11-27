@@ -9,6 +9,8 @@ export interface Recording {
 export interface Sentence {
   readonly language: string;
   readonly text: string;
+  /** The WAVE file it was read out in, from a dataset, relative to the list; none when it was recorded. */
+  readonly audio?: string;
 }
 
 const TIME = '(\\d{4})(\\d{2})(\\d{2})T(\\d{2})(\\d{2})(\\d{2})\\.(\\d{3})Z';
@@ -48,18 +50,20 @@ export function takesOf(recordings: readonly Recording[], gapMs: number): Record
 
 /**
  * The sentences in a list of them, one a line, its language and its text
- * separated by a tab: "ja\tちょっと待って". Blank lines and lines starting
+ * separated by a tab: "ja\tちょっと待って", and, from a dataset, the WAVE
+ * file it was read out in, after another tab. Blank lines and lines starting
  * with "#" are skipped.
  *
- * @throws RangeError for a line with no tab.
+ * @throws RangeError for a line with no tab, or more than two.
  */
 export function sentencesIn(list: string): Sentence[] {
   return list
     .split(/\r?\n/)
     .filter((line) => line.trim() !== '' && !line.startsWith('#'))
     .map((line, index) => {
-      const tab = line.indexOf('\t');
-      if (tab < 0) throw new RangeError(`Sentence ${index + 1} has no tab between its language and its text: ${line}`);
-      return { language: line.slice(0, tab).trim(), text: line.slice(tab + 1).trim() };
+      const [language, text, audio, ...more] = line.split('\t').map((column) => column.trim());
+      if (text === undefined) throw new RangeError(`Sentence ${index + 1} has no tab between its language and its text: ${line}`);
+      if (more.length > 0) throw new RangeError(`Sentence ${index + 1} has more than three columns: ${line}`);
+      return { language: language!, text, ...(audio ? { audio } : {}) };
     });
 }
