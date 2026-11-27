@@ -80,6 +80,15 @@ export class TranslationSession extends Entity<GuildId> {
     return TranslationSession.build(this.id, { ...this.state, languages });
   }
 
+  /**
+   * The bot listens in this voice channel from now on: it was moved there, or
+   * joined there again. Nobody is speaking yet as far as it knows, since what
+   * it heard before was on another connection. It goes on posting to the same
+   * text channel, in the same languages.
+   */
+  movedTo(voiceChannelId: ChannelId): TranslationSession {
+    return TranslationSession.build(this.id, { ...this.state, voiceChannelId, activeSpeakers: new Map() });
+  }
 
   /** A user started speaking. Saying it again changes nothing. */
   speakerStarted(userId: UserId): TranslationSession {
