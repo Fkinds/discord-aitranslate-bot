@@ -1,7 +1,8 @@
 import type { Client } from 'discord.js';
-import type { GuildId, UserId } from '../../domain/discord-ids';
+import type { ChannelId, GuildId, UserId } from '../../domain/discord-ids';
 import {
   PublishFailed,
+  type SessionNotice,
   type TranslationPost,
   type TranslationPublisher,
 } from '../../usecases/ports/translation-publisher';
@@ -13,27 +14,37 @@ import {
  *     **Alice**: 안녕하세요
  *     > こんにちは
  *
+ * and posts what it tells the members about the session (noticeText).
+ *
  * It notifies nobody of the mentions in the post.
  */
 export class DiscordTranslationPublisher implements TranslationPublisher {
   constructor(private readonly client: Pick<Client, 'channels' | 'guilds'>) {}
 
   async publish(post: TranslationPost): Promise<void> {
+    await this.post(post.textChannelId, async () => postText(await this.speakerName(post.guildId, post.speakerId), post));
+  }
+
+  async announce(notice: SessionNotice): Promise<void> {
+    await this.post(notice.textChannelId, async () => noticeText(notice));
+  }
+
+  /** Post the text to the channel, notifying nobody. */
+  private async post(textChannelId: ChannelId, text: () => Promise<string>): Promise<void> {
     try {
-      const channel = await this.client.channels.fetch(post.textChannelId.value);
+      const channel = await this.client.channels.fetch(textChannelId.value);
       if (!channel?.isSendable()) {
-        throw new PublishFailed(`The bot cannot post to channel ${post.textChannelId.value}`);
+        throw new PublishFailed(`The bot cannot post to channel ${textChannelId.value}`);
       }
-      const speaker = await this.speakerName(post.guildId, post.speakerId);
       await channel.send({
-        content: postText(speaker, post),
+        content: await text(),
         // What was said, and the speaker's name, may read "@everyone" or a
         // role or user mention; show it as text and notify nobody.
         allowedMentions: { parse: [] },
       });
     } catch (error) {
       if (error instanceof PublishFailed) throw error;
-      throw new PublishFailed(`Failed to post to channel ${post.textChannelId.value}`, { cause: error });
+      throw new PublishFailed(`Failed to post to channel ${textChannelId.value}`, { cause: error });
     }
   }
 
@@ -55,4 +66,21 @@ export function postText(speaker: string, post: Pick<TranslationPost, 'original'
       .join('\n')
   );
   return [`**${speaker}**: ${post.original}`, ...quoted].join('\n');
+}
+
+/**
+ * What the bot tells the members about the session. It names the voice
+ * channel by a mention, which Discord shows as the channel's name; but not
+ * once the channel is gone, when Discord would show it as a deleted channel.
+ */
+export function noticeText(notice: SessionNotice): string {
+  const voice = `<#${notice.voiceChannelId.value}>`;
+  switch (notice.kind) {
+    case 'connectionLost':
+      return `⚠️ Lost the connection to ${voice}. Joining again; translation resumes once it is back.`;
+    case 'connectionBack':
+      return `✅ Back in ${voice}; translating again.`;
+    case 'channelGone':
+      return '⏹️ Stopped translating: the voice channel is gone.';
+  }
 }
