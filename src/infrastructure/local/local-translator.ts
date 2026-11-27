@@ -34,6 +34,11 @@ import { languageHeard, spokenLanguageAmong, type SpeechRecognizer } from './whi
  * the order they came. An utterance that has waited `maxWaitMs` since it ended,
  * to be heard or translated, is given up on (TranslationAbandoned). One that
  * had to wait for others logs how long it waited.
+ *
+ * Each utterance heard is logged, in numbers alone, never what was said: how
+ * long it lasted, how much of it was found to be speech and in how many
+ * stretches, whether Whisper wrote anything, how long it waited to be heard,
+ * and how long hearing it took.
  */
 export class LocalTranslator implements Translator {
   private readonly hearing: SerialQueue;
@@ -53,13 +58,23 @@ export class LocalTranslator implements Translator {
   async translate(audio: SpeechAudio, languages: TranslationLanguages): Promise<SpeechTranslation> {
     const endedAt = this.clock().getTime();
     const heard = await this.hearing.run(
-      () => {
+      async () => {
         this.giveUpIfLate(endedAt);
-        return this.recognizer.recognize(audio, whisperLanguagesFor(languages)).catch((error: unknown) => {
+        const startedAt = this.clock().getTime();
+        const heard = await this.recognizer.recognize(audio, whisperLanguagesFor(languages)).catch((error: unknown) => {
           throw new TranslationFailed(`Hearing the speech failed: ${error instanceof Error ? error.message : String(error)}`, {
             cause: error,
           });
         });
+        this.logger.info('Heard an utterance', {
+          audioMs: Math.round(audio.durationMs),
+          speechMs: Math.round(heard.speechMs),
+          stretches: heard.stretches,
+          wrote: heard.text !== '',
+          waitedMs: startedAt - endedAt,
+          hearingMs: this.clock().getTime() - startedAt,
+        });
+        return heard;
       },
       (waitedMs) => this.logger.info('Hearing an utterance after waiting for those before it', { waitedMs })
     );

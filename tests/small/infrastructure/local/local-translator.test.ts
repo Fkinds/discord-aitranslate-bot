@@ -14,9 +14,14 @@ const KO = LanguageCode.of('ko');
 const JA_KO = TranslationLanguages.of(JA, KO);
 const SPEECH = SpeechAudio.fromPcm(new Uint8Array([1, 2, 3, 4]));
 
+/** What Whisper heard: a second of speech in one stretch, or none when nothing was written. */
+function heardAs(text: string, language: string | null): Heard {
+  return { text, language, speechMs: text === '' ? 0 : 1_000, stretches: text === '' ? 0 : 1 };
+}
+
 /** Hears what it is told to, or fails with what it is told to, recording the languages it was to tell it among. */
 class FakeRecognizer implements SpeechRecognizer {
-  heard: Heard | Error = { text: '', language: null };
+  heard: Heard | Error = heardAs('', null);
   readonly among: string[][] = [];
   async recognize(_audio: SpeechAudio, among: readonly LanguageCode[] = []): Promise<Heard> {
     this.among.push(among.map((language) => language.tag));
@@ -48,7 +53,7 @@ describe('LocalTranslator', () => {
   });
 
   it('translates what was said in one language of a pair into the other only', async () => {
-    recognizer.heard = { text: '안녕하세요', language: 'ko' };
+    recognizer.heard = heardAs('안녕하세요', 'ko');
 
     expect(await translator.translate(SPEECH, JA_KO)).toEqual({
       original: '안녕하세요',
@@ -59,7 +64,7 @@ describe('LocalTranslator', () => {
   });
 
   it("translates what was said in another language into each of the session's, in their order", async () => {
-    recognizer.heard = { text: 'Hello', language: 'en' };
+    recognizer.heard = heardAs('Hello', 'en');
 
     const translation = await translator.translate(SPEECH, JA_KO);
 
@@ -73,7 +78,7 @@ describe('LocalTranslator', () => {
     ['a code that is not a language tag', 'not a tag', null],
     ['no language', null, null],
   ])('tells the text translator the language Whisper heard, given %s', async (_, heard, from) => {
-    recognizer.heard = { text: 'Xin chào', language: heard };
+    recognizer.heard = heardAs('Xin chào', heard);
 
     await translator.translate(SPEECH, JA_KO);
 
@@ -81,7 +86,7 @@ describe('LocalTranslator', () => {
   });
 
   it('translates nothing that was said in the one language of the session', async () => {
-    recognizer.heard = { text: 'こんにちは', language: 'ja' };
+    recognizer.heard = heardAs('こんにちは', 'ja');
 
     expect(await translator.translate(SPEECH, TranslationLanguages.of(JA))).toEqual({
       original: 'こんにちは',
@@ -92,7 +97,7 @@ describe('LocalTranslator', () => {
   });
 
   it('has Whisper tell what was said between the two languages of a pair alone', async () => {
-    recognizer.heard = { text: '안녕하세요', language: 'ko' };
+    recognizer.heard = heardAs('안녕하세요', 'ko');
 
     await translator.translate(SPEECH, JA_KO);
 
@@ -100,7 +105,7 @@ describe('LocalTranslator', () => {
   });
 
   it('has Whisper tell what was said among any language with one language, in which anything may be said', async () => {
-    recognizer.heard = { text: 'Hello', language: 'en' };
+    recognizer.heard = heardAs('Hello', 'en');
 
     await translator.translate(SPEECH, TranslationLanguages.of(JA));
 
@@ -108,7 +113,7 @@ describe('LocalTranslator', () => {
   });
 
   it('has Whisper tell among any language for a pair with a language it does not know by that tag', async () => {
-    recognizer.heard = { text: '你好', language: 'zh' };
+    recognizer.heard = heardAs('你好', 'zh');
 
     await translator.translate(SPEECH, TranslationLanguages.of(JA, LanguageCode.of('zh-TW')));
 
@@ -116,7 +121,7 @@ describe('LocalTranslator', () => {
   });
 
   it('takes hangul Whisper heard as another language for Korean, and translates it from Korean', async () => {
-    recognizer.heard = { text: '고마워', language: 'ja' };
+    recognizer.heard = heardAs('고마워', 'ja');
 
     const translation = await translator.translate(SPEECH, JA_KO);
 
@@ -131,7 +136,7 @@ describe('LocalTranslator', () => {
   });
 
   it('fails when a translation fails', async () => {
-    recognizer.heard = { text: 'Hello', language: 'en' };
+    recognizer.heard = heardAs('Hello', 'en');
     textTranslator.error = new TranslationFailed('The translation into ja ran on');
 
     await expect(translator.translate(SPEECH, JA_KO)).rejects.toThrow('The translation into ja ran on');
@@ -176,7 +181,7 @@ class StepTextTranslator implements TextTranslator {
 /** Let every promise that can settle, settle. */
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 const speech = (bytes: number) => SpeechAudio.fromPcm(new Uint8Array(bytes));
-const inJapanese = (text: string): Heard => ({ text, language: 'ja' });
+const inJapanese = (text: string): Heard => heardAs(text, 'ja');
 
 describe('LocalTranslator, with utterances one after another', () => {
   let recognizer: StepRecognizer;
@@ -231,7 +236,7 @@ describe('LocalTranslator, with utterances one after another', () => {
     void translator.translate(speech(2), TranslationLanguages.of(JA)).then(() => order.push('Korean'));
     void translator.translate(speech(4), TranslationLanguages.of(JA)).then(() => order.push('Japanese'));
     await settle();
-    recognizer.finish[0]!.resolve({ text: '안녕', language: 'ko' });
+    recognizer.finish[0]!.resolve(heardAs('안녕', 'ko'));
     await settle();
     recognizer.finish[1]!.resolve(inJapanese('こんにちは'));
     await settle();
@@ -249,7 +254,7 @@ describe('LocalTranslator, with utterances one after another', () => {
     await settle();
 
     now = 10_000;
-    recognizer.finish[0]!.resolve({ text: '', language: null });
+    recognizer.finish[0]!.resolve(heardAs('', null));
 
     await expect(late).rejects.toEqual(new TranslationAbandoned(10_000));
     expect(recognizer.started).toEqual([2]);
@@ -279,7 +284,7 @@ describe('LocalTranslator, with utterances one after another', () => {
     recognizer.finish[0]!.reject(new Error('Whisper failed'));
     await expect(failing).rejects.toThrow(TranslationFailed);
     await settle();
-    recognizer.finish[1]!.resolve({ text: '', language: null });
+    recognizer.finish[1]!.resolve(heardAs('', null));
 
     await expect(next).resolves.toEqual({ original: '', spokenLanguage: null, translations: [] });
   });
@@ -300,9 +305,47 @@ describe('LocalTranslator, with utterances one after another', () => {
     textTranslator.finish[0]!.resolve([{ language: KO, text: '첫째' }]);
     await settle();
 
-    expect(logger.entries).toEqual([
+    expect(logger.entries.filter(({ message }) => message.includes('after waiting'))).toEqual([
       { level: 'info', message: 'Hearing an utterance after waiting for those before it', meta: { waitedMs: 700 } },
       { level: 'info', message: 'Translating an utterance after waiting for those before it', meta: { waitedMs: 1_500 } },
     ]);
+  });
+
+  it('logs each utterance it heard, in numbers alone: how long it lasted and how much was speech, the wait and the hearing', async () => {
+    void translator.translate(speech(32_000), JA_KO);
+    await settle();
+    now = 300;
+    void translator.translate(speech(16_000), JA_KO);
+    await settle();
+    now = 1_000;
+    recognizer.finish[0]!.resolve(inJapanese('first'));
+    await settle();
+    now = 1_200;
+    recognizer.finish[1]!.resolve(heardAs('', null));
+    await settle();
+
+    expect(logger.entries.filter(({ message }) => message === 'Heard an utterance')).toEqual([
+      {
+        level: 'info',
+        message: 'Heard an utterance',
+        meta: { audioMs: 1_000, speechMs: 1_000, stretches: 1, wrote: true, waitedMs: 0, hearingMs: 1_000 },
+      },
+      {
+        level: 'info',
+        message: 'Heard an utterance',
+        meta: { audioMs: 500, speechMs: 0, stretches: 0, wrote: false, waitedMs: 700, hearingMs: 200 },
+      },
+    ]);
+  });
+
+  it('logs no utterance it gave up on before hearing it', async () => {
+    void translator.translate(speech(2), JA_KO);
+    const late = translator.translate(speech(4), JA_KO);
+    await settle();
+    now = 10_000;
+    recognizer.finish[0]!.resolve(heardAs('', null));
+
+    await expect(late).rejects.toThrow(TranslationAbandoned);
+    expect(logger.messages('info').filter((message) => message === 'Heard an utterance')).toHaveLength(1);
   });
 });

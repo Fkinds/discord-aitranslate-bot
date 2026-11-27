@@ -12,6 +12,10 @@ export interface Heard {
   readonly text: string;
   /** The language Whisper heard, by its code such as "ja"; null when no speech was heard. */
   readonly language: string | null;
+  /** How long the stretches of speech found in it last, in milliseconds; 0 when none was found. */
+  readonly speechMs: number;
+  /** How many stretches of speech were found in it, each heard on its own. */
+  readonly stretches: number;
 }
 
 /** Hears what was said in speech, and in which language. */
@@ -94,8 +98,13 @@ export class WhisperRecognizer implements SpeechRecognizer {
    * as those offered in the commands.
    */
   async recognize(audio: SpeechAudio, among: readonly LanguageCode[] = []): Promise<Heard> {
+    const stretches = this.speechIn(samplesOf(audio));
+    const speech = {
+      speechMs: (stretches.reduce((sum, stretch) => sum + stretch.length, 0) / SpeechAudio.SAMPLE_RATE_HZ) * 1000,
+      stretches: stretches.length,
+    };
     const heard: Array<{ text: string; language: string; samples: number }> = [];
-    for (const stretch of this.speechIn(samplesOf(audio))) {
+    for (const stretch of stretches) {
       const stream = this.whisper.createStream();
       stream.setOption('max_tokens_per_second', String(MAX_TOKENS_PER_SECOND));
       if (among.length > 0) stream.setOption('language_candidates', among.map((language) => language.tag).join(','));
@@ -104,9 +113,9 @@ export class WhisperRecognizer implements SpeechRecognizer {
       const text = result.text.trim();
       if (text !== '') heard.push({ text, language: result.lang, samples: stretch.length });
     }
-    if (heard.length === 0) return { text: '', language: null };
+    if (heard.length === 0) return { text: '', language: null, ...speech };
     const longest = heard.reduce((a, b) => (b.samples > a.samples ? b : a));
-    return { text: heard.map((part) => part.text).join(' '), language: longest.language || null };
+    return { text: heard.map((part) => part.text).join(' '), language: longest.language || null, ...speech };
   }
 
   /** The stretches of speech in the samples; none in silence or noise. */
