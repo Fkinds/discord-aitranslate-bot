@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { readModelsConfig, type ModelsConfig } from './infrastructure/config';
 import { downloadModels } from './infrastructure/local/model-download';
-import { LOCAL_MODEL_FILES } from './infrastructure/local/model-files';
+import { CANDIDATE_MODEL_FILES, LOCAL_MODEL_FILES } from './infrastructure/local/model-files';
 import { OllamaClient, OllamaRequestFailed, type PullProgress } from './infrastructure/ollama/ollama-client';
 import { createLogger } from './infrastructure/winston-logger';
 import type { Logger } from './usecases/ports/logger';
@@ -37,16 +37,19 @@ async function pullTranslateGemma(
 /**
  * Download the models for hearing speech on this machine into MODELS_DIR,
  * keeping the files already there and intact, and with
- * TRANSLATOR=translategemma, have Ollama pull TranslateGemma.
+ * TRANSLATOR=translategemma, have Ollama pull TranslateGemma. With
+ * --candidates, also the models of the recognizers `pnpm eval:speech` compares
+ * with Whisper, which the bot does not use.
  */
 async function downloadLocalModels(): Promise<void> {
   dotenv.config({ quiet: true });
   const config = readModelsConfig(process.env, process.cwd());
   const logger = createLogger(config.logLevel);
 
-  const total = LOCAL_MODEL_FILES.reduce((sum, file) => sum + file.bytes, 0);
+  const files = process.argv.includes('--candidates') ? [...LOCAL_MODEL_FILES, ...CANDIDATE_MODEL_FILES] : LOCAL_MODEL_FILES;
+  const total = files.reduce((sum, file) => sum + file.bytes, 0);
   logger.info(`Making sure the local models are in ${config.modelsDir} (${(total / 1_000_000_000).toFixed(1)} GB in all)`);
-  await downloadModels(LOCAL_MODEL_FILES, config.modelsDir, { logger });
+  await downloadModels(files, config.modelsDir, { logger });
   logger.info('The local models are ready');
 
   if (config.translateGemma) await pullTranslateGemma(config.translateGemma, logger);

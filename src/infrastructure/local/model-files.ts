@@ -61,3 +61,36 @@ export const WHISPER_MODEL = {
 
 /** Every file for hearing speech on this machine: what `pnpm models:download` downloads. */
 export const LOCAL_MODEL_FILES: readonly ModelFile[] = Object.freeze([...Object.values(VAD_MODEL), ...Object.values(WHISPER_MODEL)]);
+
+const SENSEVOICE_REPOSITORY = 'csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17';
+const SENSEVOICE_REVISION = '2365baeacb507f821a0c8120fcee3d484dba7a07';
+
+/**
+ * SenseVoice-Small, of 2024-07-17, which transcribes speech in Chinese,
+ * English, Japanese, Korean and Cantonese and tells its language, quantized to
+ * int8 for sherpa-onnx by the maintainer of sherpa-onnx. Its weights are under
+ * FunASR's model license, which asks that "SenseVoiceSmall" by FunAudioLLM be
+ * named wherever it is used: https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE
+ * https://huggingface.co/FunAudioLLM/SenseVoiceSmall
+ */
+export const SENSEVOICE_MODEL = {
+  model: {
+    path: 'sensevoice-small-2024-07-17/model.int8.onnx',
+    url: huggingFace(SENSEVOICE_REPOSITORY, SENSEVOICE_REVISION, 'model.int8.onnx'),
+    bytes: 239_233_841,
+    sha256: 'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51',
+  },
+  tokens: {
+    path: 'sensevoice-small-2024-07-17/tokens.txt',
+    url: huggingFace(SENSEVOICE_REPOSITORY, SENSEVOICE_REVISION, 'tokens.txt'),
+    bytes: 315_894,
+    sha256: 'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc',
+  },
+} as const satisfies Record<string, ModelFile>;
+
+/**
+ * The files of the recognizers compared with Whisper by `pnpm eval:speech`,
+ * which `pnpm models:download --candidates` downloads too. The bot uses none
+ * of them.
+ */
+export const CANDIDATE_MODEL_FILES: readonly ModelFile[] = Object.freeze(Object.values(SENSEVOICE_MODEL));
