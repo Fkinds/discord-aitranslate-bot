@@ -464,12 +464,16 @@ To tell whether a change makes the bot hear better, measure it on recordings of 
 3. Run `/translate-join` with the languages of the sentences, and read them out in order, leaving 3 seconds or more between sentences.
 4. Run `pnpm eval:speech <dir>`. It groups the recordings into sentences by the pauses between them (`--gap-ms`, 1500 by default), and stops if their count is not that of the sentences. The pair of languages is that of the sentences; for sentences in one language, read by one speaker, give the session's pair with `--pair`, such as `--pair ja,ko`.
 
-For each sentence, it shows what Whisper heard, three ways:
+Or measure it on a dataset of sentences read out, each in a WAVE file of its own (16-bit mono at 16 kHz): give each sentence its file after another tab, relative to the directory, and run `pnpm eval:speech <dir>`. No recording is needed.
+
+For each sentence, it shows what each recognizer heard, three ways, or of a dataset, the first alone:
 - **pair:** as the bot hears it: each utterance, between the two languages, corrected by the letters.
-- **any:** each utterance among every language Whisper knows, as before #119.
+- **any:** each utterance among every language the recognizer knows, as before #119.
 - **whole:** the sentence as one utterance.
 
-For each way, it gives the character error rate, the sentences heard in the right language, and the time it took for each second of speech. The character error rate ignores spaces and punctuation, but counts kana written as kanji, such as 行きました for いきました, as errors.
+It writes them to `speech-results.md` in the directory, and for each recognizer, way and language, it gives the character error rate, the share of sentences of which nothing was written, the share heard in the right language, and the time it took for each second of speech; and for each recognizer, the most memory it took. The character error rate ignores spaces and punctuation, but counts kana written as kanji, such as 行きました for いきました, as errors.
+
+- **`--recognizers whisper,sensevoice`:** the recognizers to compare; Whisper, the bot's, by default. SenseVoice needs `pnpm models:download --candidates`, and cannot be told a pair: it tells among the languages it knows. Each runs in a process of its own, so that the memory it takes is measured alone, with the same 4 threads the bot gives Whisper.
 
 ### Comparing Translations
 

@@ -51,4 +51,15 @@ describe('sentencesIn', () => {
   it('refuses a line with no tab, saying which', () => {
     expect(() => sentencesIn('ja\tはい\nko 네')).toThrow('Sentence 2 has no tab between its language and its text: ko 네');
   });
+
+  it('reads the WAVE file of a sentence from a dataset, after another tab', () => {
+    expect(sentencesIn('ja\t岩田さんの車で行きました\tja/1.wav\nko\t네\n')).toEqual([
+      { language: 'ja', text: '岩田さんの車で行きました', audio: 'ja/1.wav' },
+      { language: 'ko', text: '네' },
+    ]);
+  });
+
+  it('refuses a line of more than three columns, saying which', () => {
+    expect(() => sentencesIn('ja\tはい\t1.wav\tmore')).toThrow('Sentence 1 has more than three columns: ja\tはい\t1.wav\tmore');
+  });
 });
