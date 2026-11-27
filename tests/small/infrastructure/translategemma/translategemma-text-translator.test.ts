@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { LanguageCode } from '../../../../src/domain/language-code';
 import { OllamaRequestFailed } from '../../../../src/infrastructure/ollama/ollama-client';
+import { Glossary } from '../../../../src/infrastructure/translategemma/glossary';
 import { KEEP_THE_TONE } from '../../../../src/infrastructure/translategemma/prompt';
 import { TranslateGemmaTextTranslator } from '../../../../src/infrastructure/translategemma/translategemma-text-translator';
 import { TranslationFailed } from '../../../../src/usecases/ports/translator';
@@ -129,6 +130,40 @@ describe('TranslateGemmaTextTranslator', () => {
 
     const logged = JSON.stringify(logger.entries);
     expect(logged).not.toMatch(/[\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Han}]/u);
+  });
+
+  describe('with a glossary', () => {
+    const glossary = Glossary.parse('マーシー\t메르시\nウルト\t궁', [JA, KO]);
+
+    beforeEach(() => {
+      translator = new TranslateGemmaTextTranslator(ollama, MODEL, logger, glossary);
+    });
+
+    it("asks to translate the glossary's terms found in the text as it says", async () => {
+      ollama.answer('메르시 궁 있어?');
+
+      await translator.translate('マーシー、ウルトある？', JA, [KO]);
+
+      expect(ollama.prompts[0]).toContain('Translate these terms as given: マーシー → 메르시; ウルト → 궁. Please translate');
+    });
+
+    it('asks as without one when the text has none of its terms', async () => {
+      ollama.answer('잠깐만');
+
+      await translator.translate('ちょっと待って', JA, [KO]);
+
+      expect(ollama.prompts[0]).not.toContain('Translate these terms');
+    });
+
+    it("leaves the glossary out when it translates again with the model card's prompt", async () => {
+      ollama.answer('메르시 (Mercy)', '메르시');
+
+      const translations = await translator.translate('マーシー', JA, [KO]);
+
+      expect(translations).toEqual([{ language: KO, text: '메르시' }]);
+      expect(ollama.prompts[0]).toContain('Translate these terms');
+      expect(ollama.prompts[1]).not.toContain('Translate these terms');
+    });
   });
 
   it('fails with TranslationFailed when Ollama fails, saying why', async () => {
