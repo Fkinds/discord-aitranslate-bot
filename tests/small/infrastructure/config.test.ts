@@ -85,6 +85,21 @@ describe('readConfig', () => {
     expect(config.translator).toMatchObject({ ollamaUrl: 'http://gpu-box:11434/', model: 'translategemma:4b' });
   });
 
+  it.each([
+    ['an absolute path as it is', '/etc/bot/overwatch.tsv', '/etc/bot/overwatch.tsv'],
+    ['a relative path from the working directory', 'glossaries/overwatch.tsv', '/srv/bot/glossaries/overwatch.tsv'],
+  ])('takes GLOSSARY_FILE with TRANSLATOR=translategemma, %s', (_case, file, expected) => {
+    expect(readConfig({ ...REQUIRED, TRANSLATOR: 'translategemma', GLOSSARY_FILE: file }, CWD).translator).toMatchObject({
+      glossaryFile: expected,
+    });
+  });
+
+  it.each(['claude', 'gemini', 'fake'])('refuses GLOSSARY_FILE with TRANSLATOR=%s at startup', (translator) => {
+    expect(() => readConfig({ ...REQUIRED, TRANSLATOR: translator, GLOSSARY_FILE: 'glossaries/overwatch.tsv' }, CWD)).toThrow(
+      new ConfigError(`GLOSSARY_FILE works only with TRANSLATOR=translategemma, got TRANSLATOR=${translator}`)
+    );
+  });
+
   it('rejects an OLLAMA_HOST that is not http or https at startup', () => {
     const reading = () => readConfig({ ...REQUIRED, TRANSLATOR: 'translategemma', OLLAMA_HOST: 'tcp://gpu-box' }, CWD);
 

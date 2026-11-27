@@ -470,10 +470,11 @@ pnpm eval:translation <dir> [--models translategemma:12b,gemma4:12b-it-qat] [--b
   - `translations-key.md`: which model each letter is, the median time a sentence took, and how often TranslateGemma's translation looked wrong.
 - **`--back`:** translates each translation back with TranslateGemma 12B, for someone who reads only the language it came from. It is a rough check.
 - **`--glossary <file>`:** each TranslateGemma model also translates with the glossary, to tell whether it helps. TranslateGemma is then asked to translate the terms of the glossary found in each sentence as it says; when it asks again because the translation looked wrong, it asks without them. The bot itself uses no glossary.
-  - **The file:** a term a line, in Japanese and in Korean, separated by a tab. Each may be written several ways separated by `|`, the first being the one to translate into. A line that starts with `#` is a note.
+  - **The file:** tab-separated values. The first line names the two languages by their language tags, such as `ja` and `ko`, and each line after it is a term, in those two languages, separated by a tab. Each may be written several ways separated by `|`, the first being the one to translate into; a way of writing a term is on one line only. A line that starts with `#` is a note, which plain tab-separated values do not have.
 
     ```
     # Heroes
+    ja	ko
     マーシー	메르시|메르
     ウルト|ult	궁|궁극기
     ```

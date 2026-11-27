@@ -133,7 +133,7 @@ describe('TranslateGemmaTextTranslator', () => {
   });
 
   describe('with a glossary', () => {
-    const glossary = Glossary.parse('マーシー\t메르시\nウルト\t궁', [JA, KO]);
+    const glossary = Glossary.parse('ja\tko\nマーシー\t메르시\nウルト\t궁');
 
     beforeEach(() => {
       translator = new TranslateGemmaTextTranslator(ollama, MODEL, logger, glossary);

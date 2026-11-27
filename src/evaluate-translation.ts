@@ -20,8 +20,6 @@ const DEFAULT_MODELS = ['translategemma:12b', 'translategemma:12b-it-q8_0', 'gem
 const BACK_MODEL = 'translategemma:12b';
 /** How long a translation may take; a model may also be loaded first. */
 const OLLAMA_OPTIONS = { timeoutMs: 120_000, retryDelayMs: 1_000 };
-/** The languages of the glossary's two columns. */
-const GLOSSARY_LANGUAGES = [LanguageCode.of('ja'), LanguageCode.of('ko')] as const;
 
 const USAGE = `Usage: pnpm eval:translation <directory> [--models <model>,<model>,...] [--back] [--glossary <file>]
 
@@ -34,8 +32,9 @@ the two, and writes:
 With --back, each translation is also translated back with ${BACK_MODEL}, for a
 rough check by someone who reads only the source language.
 With --glossary, each TranslateGemma model also translates with the glossary
-in <file> (a term a line, Japanese and Korean separated by a tab), asked to
-translate the terms found in each sentence as it says; the key lists them.
+in <file> (its two languages on the first line, then a term a line, separated
+by a tab), asked to translate the terms found in each sentence as it says;
+the key lists them.
 Models: ${DEFAULT_MODELS.join(', ')} by default; Ollama must have them.`;
 
 /**
@@ -185,8 +184,8 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const glossary =
-    glossaryFile === undefined ? undefined : Glossary.parse(await readFile(path.resolve(glossaryFile), 'utf8'), GLOSSARY_LANGUAGES);
-  if (glossary) console.log(`Read ${glossary.size} terms from ${glossaryFile}`);
+    glossaryFile === undefined ? undefined : Glossary.parse(await readFile(path.resolve(glossaryFile), 'utf8'));
+  if (glossary) console.log(`Read ${glossary.size} terms in ${glossary.languages.map((language) => language.tag).join(' and ')} from ${glossaryFile}`);
   await evaluate(path.resolve(dir), models, args.includes('--back'), glossary);
 }
 
