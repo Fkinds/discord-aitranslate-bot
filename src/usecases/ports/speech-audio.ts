@@ -26,4 +26,10 @@ export class SpeechAudio {
   get isEmpty(): boolean {
     return this.pcm.byteLength === 0;
   }
+
+  /** How long the speech lasts, in milliseconds. */
+  get durationMs(): number {
+    const samples = this.pcm.byteLength / (SpeechAudio.BITS_PER_SAMPLE / 8) / SpeechAudio.CHANNELS;
+    return (samples / SpeechAudio.SAMPLE_RATE_HZ) * 1000;
+  }
 }
