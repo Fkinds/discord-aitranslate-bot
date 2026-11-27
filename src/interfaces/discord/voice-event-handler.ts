@@ -80,13 +80,17 @@ export class VoiceEventHandler {
     }
   }
 
-  disconnected(guildId: GuildId): void {
-    this.safely('disconnected', guildId, () => {
-      const result = this.useCases.endDisconnectedSession.execute({ guildId });
+  /** Resolves once the session has ended and that has been said, or failed to be; never rejects. */
+  async disconnected(guildId: GuildId): Promise<void> {
+    try {
+      const result = await this.useCases.endDisconnectedSession.execute({ guildId });
       if (result.kind === 'ended') {
         this.logger.warn('Voice connection lost; translation ended', { guildId: guildId.value });
       }
-    });
+    } catch (error) {
+      const message = error instanceof PublishFailed ? 'Failed to post that translation ended' : 'Failed to handle a voice event';
+      this.logger.error(message, { event: 'disconnected', guildId: guildId.value, error });
+    }
   }
 
   private safely(event: string, guildId: GuildId, handle: () => void): void {

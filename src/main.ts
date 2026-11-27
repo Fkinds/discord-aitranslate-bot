@@ -202,12 +202,13 @@ export function compose(
   clock: Clock = () => new Date()
 ): void {
   const sessions = new SessionStore();
+  const publisher = new DiscordTranslationPublisher(client);
   const voiceEvents = new VoiceEventHandler(
     {
       recordSpeakingStarted: new RecordSpeakingStarted(sessions),
       recordSpeakingStopped: new RecordSpeakingStopped(sessions),
-      translateUtterance: new TranslateUtterance(sessions, translator, new DiscordTranslationPublisher(client)),
-      endDisconnectedSession: new EndDisconnectedSession(sessions),
+      translateUtterance: new TranslateUtterance(sessions, translator, publisher),
+      endDisconnectedSession: new EndDisconnectedSession(sessions, publisher),
     },
     logger
   );

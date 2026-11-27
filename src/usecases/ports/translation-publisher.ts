@@ -14,6 +14,24 @@ export interface TranslationPost {
   readonly translations: ReadonlyArray<{ readonly language: LanguageCode; readonly text: string }>;
 }
 
+/**
+ * What the bot tells the members of the server about its voice connection,
+ * in the session's text channel:
+ *
+ * - `connectionLost`: it lost the connection to the voice channel a while
+ *   ago, and is trying to get it back.
+ * - `connectionBack`: it got the connection back, after saying it had lost it.
+ * - `channelGone`: the voice channel is gone, so translation has ended.
+ */
+export interface SessionNotice {
+  readonly kind: 'connectionLost' | 'connectionBack' | 'channelGone';
+  readonly guildId: GuildId;
+  /** The channel to post to. */
+  readonly textChannelId: ChannelId;
+  /** The voice channel the notice is about. */
+  readonly voiceChannelId: ChannelId;
+}
+
 /** Posting failed for a technical reason, such as a missing channel or permission. */
 export class PublishFailed extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -22,8 +40,11 @@ export class PublishFailed extends Error {
   }
 }
 
-/** Posts what was said, and its translations, where the members of the server read them. */
+/** Posts what was said, and its translations, where the members of the server read them, and tells them about the session. */
 export interface TranslationPublisher {
   /** @throws PublishFailed when it cannot be posted. */
   publish(post: TranslationPost): Promise<void>;
+
+  /** @throws PublishFailed when it cannot be posted. */
+  announce(notice: SessionNotice): Promise<void>;
 }

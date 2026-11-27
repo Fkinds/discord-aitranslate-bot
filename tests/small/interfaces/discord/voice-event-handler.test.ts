@@ -34,7 +34,7 @@ describe('VoiceEventHandler', () => {
         recordSpeakingStarted: new RecordSpeakingStarted(sessions),
         recordSpeakingStopped: new RecordSpeakingStopped(sessions),
         translateUtterance: new TranslateUtterance(sessions, translator, publisher),
-        endDisconnectedSession: new EndDisconnectedSession(sessions),
+        endDisconnectedSession: new EndDisconnectedSession(sessions, publisher),
       },
       logger
     );
@@ -121,17 +121,27 @@ describe('VoiceEventHandler', () => {
     expect(logger.messages('error')).toEqual(['Failed to process audio stream']);
   });
 
-  it('ends the session when the connection is lost, and logs it', () => {
+  it('ends the session when the connection is lost for good, says so, and logs it', async () => {
     sessions.save(aSession());
 
-    handler.disconnected(GUILD);
+    await handler.disconnected(GUILD);
 
     expect(sessions.find(GUILD)).toBeUndefined();
+    expect(publisher.notices.map((notice) => notice.kind)).toEqual(['channelGone']);
     expect(logger.messages('warn')).toEqual(['Voice connection lost; translation ended']);
   });
 
-  it('logs nothing when a connection is lost with no session', () => {
-    handler.disconnected(GUILD);
+  it('logs a failure to say that translation ended, and does not reject', async () => {
+    sessions.save(aSession());
+    publisher.failNext(new PublishFailed('Missing Access'));
+
+    await expect(handler.disconnected(GUILD)).resolves.toBeUndefined();
+    expect(sessions.find(GUILD)).toBeUndefined();
+    expect(logger.messages('error')).toEqual(['Failed to post that translation ended']);
+  });
+
+  it('logs nothing when a connection is lost with no session', async () => {
+    await handler.disconnected(GUILD);
 
     expect(logger.entries).toEqual([]);
   });

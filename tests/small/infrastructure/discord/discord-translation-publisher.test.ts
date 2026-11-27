@@ -2,8 +2,12 @@ import { describe, it, expect, beforeEach } from '@jest/globals';
 import type { Client } from 'discord.js';
 import { ChannelId, GuildId, UserId } from '../../../../src/domain/discord-ids';
 import { LanguageCode } from '../../../../src/domain/language-code';
-import { DiscordTranslationPublisher, postText } from '../../../../src/infrastructure/discord/discord-translation-publisher';
-import { PublishFailed, type TranslationPost } from '../../../../src/usecases/ports/translation-publisher';
+import {
+  DiscordTranslationPublisher,
+  noticeText,
+  postText,
+} from '../../../../src/infrastructure/discord/discord-translation-publisher';
+import { PublishFailed, type SessionNotice, type TranslationPost } from '../../../../src/usecases/ports/translation-publisher';
 
 /** The parts of a discord.js Client the publisher touches. */
 class FakeDiscord {
@@ -46,6 +50,13 @@ const post = (guild = '1', original = 'Hello'): TranslationPost => ({
   speakerId: UserId.of('30'),
   original,
   translations: [{ language: JA, text: 'こんにちは' }],
+});
+
+const notice = (kind: SessionNotice['kind']): SessionNotice => ({
+  kind,
+  guildId: GuildId.of('1'),
+  textChannelId: ChannelId.of('20'),
+  voiceChannelId: ChannelId.of('10'),
 });
 
 describe('DiscordTranslationPublisher', () => {
@@ -103,6 +114,44 @@ describe('DiscordTranslationPublisher', () => {
 
     expect(failure).toBeInstanceOf(PublishFailed);
     expect((failure as PublishFailed).cause).toBe(cause);
+  });
+
+  describe('announce', () => {
+    it('posts the notice, notifying nobody', async () => {
+      await publisher.announce(notice('connectionBack'));
+
+      expect(discord.messages).toEqual([{ content: '✅ Back in <#10>; translating again.', allowedMentions: { parse: [] } }]);
+    });
+
+    it.each([
+      ['the channel is gone', (d: FakeDiscord) => (d.channelExists = false)],
+      ['the bot cannot post to the channel', (d: FakeDiscord) => (d.sendable = false)],
+    ])('fails when %s', async (_, arrange) => {
+      arrange(discord);
+
+      await expect(publisher.announce(notice('connectionLost'))).rejects.toThrow(PublishFailed);
+      expect(discord.sent).toEqual([]);
+    });
+
+    it('fails with what Discord said as the cause', async () => {
+      const cause = new Error('Missing Permissions');
+      discord.sendError = cause;
+
+      const failure = await publisher.announce(notice('connectionLost')).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(PublishFailed);
+      expect((failure as PublishFailed).cause).toBe(cause);
+    });
+  });
+});
+
+describe('noticeText', () => {
+  it.each([
+    ['connectionLost', '⚠️ Lost the connection to <#10>. Joining again; translation resumes once it is back.'],
+    ['connectionBack', '✅ Back in <#10>; translating again.'],
+    ['channelGone', '⏹️ Stopped translating: the voice channel is gone.'],
+  ] as const)('says %s', (kind, text) => {
+    expect(noticeText(notice(kind))).toBe(text);
   });
 });
 

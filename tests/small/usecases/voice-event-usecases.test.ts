@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach } from '@jest/globals';
 import { GuildId, UserId } from '../../../src/domain/discord-ids';
 import { EndDisconnectedSession } from '../../../src/usecases/end-disconnected-session';
 import { RecordSpeakingStarted, RecordSpeakingStopped } from '../../../src/usecases/record-speaking';
+import { PublishFailed } from '../../../src/usecases/ports/translation-publisher';
 import { SessionStore } from '../../../src/usecases/session-store';
 import { aSession } from '../../support/builders';
+import { FakeTranslationPublisher } from '../../support/fakes/fake-translation-publisher';
 
 const GUILD = GuildId.of('1');
 const ALICE = UserId.of('30');
@@ -54,18 +56,38 @@ describe('voice event use cases', () => {
   });
 
   describe('EndDisconnectedSession', () => {
-    it('ends the session', () => {
-      const running = aSession();
+    let publisher: FakeTranslationPublisher;
+
+    beforeEach(() => {
+      publisher = new FakeTranslationPublisher();
+    });
+
+    it('ends the session, and says so in its text channel', async () => {
+      const running = aSession({ voice: '10', text: '20' });
       sessions.save(running);
 
-      const result = new EndDisconnectedSession(sessions).execute({ guildId: GUILD });
+      const result = await new EndDisconnectedSession(sessions, publisher).execute({ guildId: GUILD });
 
       expect(result).toEqual({ kind: 'ended', session: running });
       expect(sessions.find(GUILD)).toBeUndefined();
+      expect(publisher.notices).toEqual([
+        { kind: 'channelGone', guildId: GUILD, textChannelId: running.textChannelId, voiceChannelId: running.voiceChannelId },
+      ]);
     });
 
-    it('does nothing when no session is running', () => {
-      expect(new EndDisconnectedSession(sessions).execute({ guildId: GUILD })).toEqual({ kind: 'notRunning' });
+    it('has ended the session when it cannot say so', async () => {
+      sessions.save(aSession());
+      publisher.failNext(new PublishFailed('Missing Access'));
+
+      await expect(new EndDisconnectedSession(sessions, publisher).execute({ guildId: GUILD })).rejects.toThrow(PublishFailed);
+      expect(sessions.find(GUILD)).toBeUndefined();
+    });
+
+    it('does nothing when no session is running', async () => {
+      await expect(new EndDisconnectedSession(sessions, publisher).execute({ guildId: GUILD })).resolves.toEqual({
+        kind: 'notRunning',
+      });
+      expect(publisher.notices).toEqual([]);
     });
   });
 });
