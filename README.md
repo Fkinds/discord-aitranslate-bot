@@ -338,6 +338,12 @@ When the connection has been away for 30 seconds, however often the bot joined a
 | [Silero VAD](https://github.com/snakers4/silero-vad) v6.2.3 | Tells speech from silence and noise | MIT | 2.3 MB |
 | [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo), int8 for [sherpa-onnx](https://huggingface.co/csukuangfj/sherpa-onnx-whisper-turbo) | Transcribes, and tells the language | MIT | 1.0 GB |
 
+`pnpm models:download --candidates` also downloads a recognizer compared with Whisper by `pnpm eval:speech`, which the bot does not use:
+
+| Model | What it does | License | Size |
+|-------|--------------|---------|------|
+| [SenseVoiceSmall](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) by FunAudioLLM, of 2024-07-17, int8 for [sherpa-onnx](https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17) | Transcribes Chinese, English, Japanese, Korean and Cantonese, and tells the language | [FunASR model license](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE), which asks that it be named where it is used | 0.2 GB |
+
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) runs Silero VAD and Whisper on the CPU. Running them always free and always on, without this machine, is open: [#69](https://github.com/Fkinds/discord-aitranslate-bot/issues/69).
 
 ### When Claude Fails
@@ -429,11 +435,11 @@ The speech models for Whisper are not in `MODELS_DIR`:
 | Command | What it does |
 |---------|--------------|
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
-| `pnpm models:download` | Download the speech models into `MODELS_DIR`, and check them; with `TRANSLATOR=translategemma`, have Ollama pull the model too |
+| `pnpm models:download` | Download the speech models into `MODELS_DIR`, and check them; with `TRANSLATOR=translategemma`, have Ollama pull the model too; with `--candidates`, also the recognizers `pnpm eval:speech` compares |
 | `pnpm eval:speech <dir>` | Measure how well Whisper hears recorded utterances (see [Measuring Transcription](#measuring-transcription)) |
 | `pnpm eval:translation <dir>` | Have several models on Ollama translate the same sentences, to judge them blind (see [Comparing Translations](#comparing-translations)) |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
-| `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download` first |
+| `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download --candidates` first |
 | `pnpm test:watch` | Run the small tests again on every change |
 | `pnpm test:coverage` | Run the small and medium tests with a coverage report |
 | `pnpm lint:layers` | Check the dependencies between the layers |
@@ -556,7 +562,7 @@ Contributions are welcome! Please follow these steps:
 1. Fork the repository
 2. Create a feature branch
 3. Write tests with your change, in the directory of their size
-4. Make sure `pnpm test`, `pnpm test:medium` (after `pnpm models:download`) and `pnpm lint:layers` pass
+4. Make sure `pnpm test`, `pnpm test:medium` (after `pnpm models:download --candidates`) and `pnpm lint:layers` pass
 5. Write commit messages that follow Conventional Commits
 6. Submit a pull request
 

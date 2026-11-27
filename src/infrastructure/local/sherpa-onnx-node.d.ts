@@ -53,9 +53,19 @@ declare module 'sherpa-onnx-node' {
     readonly task?: 'transcribe' | 'translate';
   }
 
+  export interface OfflineSenseVoiceModelConfig {
+    readonly model: string;
+    /** "auto" to have SenseVoice tell the language, or one of "zh", "en", "ja", "ko" and "yue". */
+    readonly language?: string;
+    /** 1 to write numbers and punctuation as written text does (inverse text normalization), 0 not to. */
+    readonly useInverseTextNormalization?: number;
+  }
+
   export interface OfflineRecognizerConfig {
     readonly modelConfig: {
-      readonly whisper: OfflineWhisperModelConfig;
+      /** The one model to recognize with: Whisper or SenseVoice. */
+      readonly whisper?: OfflineWhisperModelConfig;
+      readonly senseVoice?: OfflineSenseVoiceModelConfig;
       readonly tokens: string;
       readonly numThreads?: number;
       readonly provider?: string;
@@ -65,7 +75,7 @@ declare module 'sherpa-onnx-node' {
 
   export interface OfflineRecognizerResult {
     readonly text: string;
-    /** The language Whisper heard, such as "ja". */
+    /** The language heard: "ja" from Whisper, "<|ja|>" from SenseVoice. */
     readonly lang: string;
   }
 
