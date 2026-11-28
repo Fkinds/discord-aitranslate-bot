@@ -436,7 +436,8 @@ The speech models for Whisper are not in `MODELS_DIR`:
 |---------|--------------|
 | `pnpm run build` | Compile the TypeScript in `src/` into `dist/` |
 | `pnpm models:download` | Download the speech models into `MODELS_DIR`, and check them; with `TRANSLATOR=translategemma`, have Ollama pull the model too; with `--candidates`, also the recognizers `pnpm eval:speech` compares |
-| `pnpm eval:speech <dir>` | Measure how well Whisper hears recorded utterances (see [Measuring Transcription](#measuring-transcription)) |
+| `pnpm eval:speech <dir>` | Measure how well Whisper, or another recognizer, hears recorded utterances or a dataset (see [Measuring Transcription](#measuring-transcription)) |
+| `pnpm eval:fleurs <dir>` | Take sentences read out in Japanese and Korean from FLEURS, for `pnpm eval:speech` |
 | `pnpm eval:translation <dir>` | Have several models on Ollama translate the same sentences, to judge them blind (see [Comparing Translations](#comparing-translations)) |
 | `pnpm test` | Run the small tests (the same as `pnpm test:small`) |
 | `pnpm test:medium` | Run the medium tests, one file at a time; run `pnpm models:download --candidates` first |
@@ -464,7 +465,7 @@ To tell whether a change makes the bot hear better, measure it on recordings of 
 3. Run `/translate-join` with the languages of the sentences, and read them out in order, leaving 3 seconds or more between sentences.
 4. Run `pnpm eval:speech <dir>`. It groups the recordings into sentences by the pauses between them (`--gap-ms`, 1500 by default), and stops if their count is not that of the sentences. The pair of languages is that of the sentences; for sentences in one language, read by one speaker, give the session's pair with `--pair`, such as `--pair ja,ko`.
 
-Or measure it on a dataset of sentences read out, each in a WAVE file of its own (16-bit mono at 16 kHz): give each sentence its file after another tab, relative to the directory, and run `pnpm eval:speech <dir>`. No recording is needed.
+Or measure it on a dataset of sentences read out, each in a WAVE file of its own (16-bit mono at 16 kHz): give each sentence its file after another tab, relative to the directory, and run `pnpm eval:speech <dir>`. No recording is needed. `pnpm eval:fleurs <dir>` makes one from [FLEURS](https://huggingface.co/datasets/google/fleurs) (Google, CC BY 4.0), at a fixed revision: the first 100 utterances of different sentences in Japanese and in Korean of its test split (`--count` for another number), downloading 0.6 GB. They are sentences of Wikipedia read out, longer than what is said in voice chat, and recorded otherwise than Discord sends speech, so compare recognizers on them, rather than take their error rates as the bot's.
 
 For each sentence, it shows what each recognizer heard, three ways, or of a dataset, the first alone:
 - **pair:** as the bot hears it: each utterance, between the two languages, corrected by the letters.
